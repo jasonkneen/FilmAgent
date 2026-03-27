@@ -5,10 +5,7 @@
 ## 检查是否已运行
 
 ```bash
-# 方式1：推荐（检查端口监听）
-lsof -i :8000 | grep LISTEN
-
-# 方式2：备用（检查服务响应）
+# 推荐（检查服务响应）
 curl -s http://localhost:8000/api/health && echo "后端运行中" || echo "后端未运行"
 ```
 

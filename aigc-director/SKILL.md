@@ -10,7 +10,6 @@ metadata:
 # AIGC-Director Agent Skill
 
 > **本地运行**：这是一个**本地部署**的视频生成项目，**前后端都运行在本机**：
-> - 项目根目录：`aigc-claw/`
 > - 后端：`http://localhost:8000`
 > - 前端：`http://localhost:3000`
 > - 所有 API 调用都请求本地服务器，不要请求其他地址！
@@ -21,6 +20,24 @@ metadata:
 > **核心原则**：每个阶段的产物都必须展示给用户，必须停下来等待用户确认后才能继续下一阶段。
 
 > **防止遗忘**：在整个流程中，Agent 可能会忘记之前的用户输入或之前阶段的产物内容。**每当进入一个新的阶段时，Agent 都必须重新加载这篇SKILL文档，确保不会忘记任何细节**。
+
+---
+
+## 项目结构
+
+```
+aigc-director/                    ← OpenClaw 调用的 skill 根目录
+├── aigc-claw/                    ← 前后端项目代码
+│   ├── backend/                  ← FastAPI 后端（端口 8000）
+│   └── frontend/                 ← Next.js 前端（端口 3000）
+├── references/                   ← OpenClaw 调用时的参考文档
+│   ├── init_project/             ← 项目初始化
+│   ├── run_project/              ← 服务启动
+│   ├── workflow/                 ← 六阶段工作流 API
+│   ├── sandbox/                  ← 临时工作台 API
+│   └── send_message/             ← 消息发送
+└── SKILL.md                      ← skill 正文
+```
 
 ---
 
@@ -46,25 +63,15 @@ metadata:
 
 ### 1. 本地部署(仅初始化时执行)
 
-当用户要求"初始化项目"、"配置项目"、"部署项目"时，需要先进行项目初始化：
-
-```bash
-# 参考 init_project/init_all.md 执行完整初始化流程
-```
+当用户要求"初始化项目"、"配置项目"、"部署项目"时，需要先进行项目初始化：参考 [init_all.md](references/init_project/init_all.md) 执行完整初始化流程。
 
 > **注意**：仅在用户首次下载项目或需要重新配置环境时使用。项目已初始化过则跳过此步骤，直接检查服务运行状态。
 
 ### 2. 检查本地服务
 
-```bash
-# 检查后端 (本地 8000) 是否运行
-lsof -i :8000 | grep LISTEN || echo "后端未运行"
+参考 [start_backend.md](references/run_project/start_backend.md) 和 [start_frontend.md](references/run_project/start_frontend.md) 检查服务是否运行。
 
-# 检查前端 (本地 3000) 是否运行
-lsof -i :3000 | grep LISTEN || echo "前端未运行"
-```
-
-> **⚠️ 强制要求**：如果服务未运行，必须先启动服务再继续！参考 [start_backend.md](references/run_project/start_backend.md) 和 [start_frontend.md](references/run_project/start_frontend.md)
+> **⚠️ 强制要求**：如果服务未运行，必须先启动服务再继续！
 
 ### 2. 路由判断
 
@@ -168,8 +175,24 @@ curl "http://localhost:8000/api/project/{session_id}/artifact/{stage}"
 1. 刚完成什么
 2. 下一步做什么
 3. 需要用户决策的内容
-4. **Web 界面链接**：`http://[服务器IP]:3000/?session={session_id}&stage={stage}`
+4. **Web 界面链接**：`http://[本地IP]:3000/?session={session_id}&stage={stage}`（注意，这里使用本地 IPv4 地址，不要用 localhost！）
 5. 产物图片/视频（直接发送文件，禁止只发路径）
+
+### Web 界面链接格式
+
+```python
+# 获取本地 IPv4 地址
+import socket
+local_ip = socket.gethostbyname(socket.gethostname())
+
+# 构造前端 URL
+frontend_url = f"http://{local_ip}:3000/?session={session_id}&stage={stage}"
+
+# 发送给用户
+send_to_user(f"📊 查看详情：{frontend_url}")
+```
+
+> **重要**：必须使用本地 IPv4 地址（如 `192.168.1.x`），不要使用 `localhost` 或 `127.0.0.1`，否则用户无法从其他设备访问！
 
 ---
 

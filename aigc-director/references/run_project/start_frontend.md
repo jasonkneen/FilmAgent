@@ -5,10 +5,7 @@
 ## 检查是否已运行
 
 ```bash
-# 方式1：推荐（检查端口监听）
-lsof -i :3000 | grep LISTEN
-
-# 方式2：备用（检查服务响应）
+# 推荐（检查服务响应）
 curl -s http://localhost:3000 > /dev/null 2>&1 && echo "前端运行中" || echo "前端未运行"
 ```
 
