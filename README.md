@@ -173,6 +173,23 @@ npm start
 你用aigc-director来帮我生成一个视频，内容是"一条狗的使命"
 ```
 
+### 方式三：通过 ClawHub 安装
+
+请确保本地安装了clawhub-cli
+
+打开终端，输入命令，所有询问均选择yes
+
+```bash
+clawhub install aigc-director
+```
+
+安装完成后，ClawHub 会将 `aigc-director` 复制到 `workspace/skills`（或指定的 skills 目录）。
+
+之后可以参考方式一手动安装自行构建项目并运行，也可以使用openclaw完成后续项目构建。
+
+在第一次使用 `aigc-director` 时，如果没有手动构建项目，openclaw会自动构建前后端并运行，无需手动初始化（构建项目需要配置环境和编译，请耐心等待）。
+
+
 ---
 
 ## 📊 工作流
