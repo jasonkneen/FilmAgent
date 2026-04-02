@@ -281,6 +281,9 @@ class StoryboardAgent(AgentInterface):
         characters = {c["name"]: c for c in script_json.get("characters", [])}
         settings_map = {s["name"]: s for s in script_json.get("settings", [])}
 
+        # 拼接完整剧情以供扩写参考
+        full_plot_text = "\n".join([f"场景{s.get('scene_number', i+1)}: {s.get('plot', '')}" for i, s in enumerate(scenes)])
+
         is_zh = any('\u4e00' <= c <= '\u9fff' for c in script_json.get("title", ""))
         lang = 'zh' if is_zh else 'en'
         shot_prompt_template = _get_shot_prompt(lang)
@@ -332,7 +335,7 @@ class StoryboardAgent(AgentInterface):
                 plot=original_plot,
                 char_descriptions=char_desc_text,
                 setting_description=setting_desc,
-                script=json.dumps(script_json, ensure_ascii=False, indent=2)
+                script=full_plot_text
             )
             
             expanded_plot = original_plot
