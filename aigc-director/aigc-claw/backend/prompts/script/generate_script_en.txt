@@ -43,4 +43,4 @@ Boss Wang (slamming the table): Stop making excuses! Little Zhang launched three
 {style}
 
 ---
-Take a deep breath and start your creation. Based on the inspiration above, directly output the complete script text (containing the full content of 4-6 episodes). Do not include any filler words or prefaces.
+Take a deep breath and start your creation. Based on the inspiration above, directly output the complete script text (containing the full content of {episodes} episodes, with estimated duration of 1 to 2 minutes per episode). Do not include any filler words or prefaces.

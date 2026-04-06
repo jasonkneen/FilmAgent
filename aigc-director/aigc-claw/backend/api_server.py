@@ -94,10 +94,11 @@ class ProjectStartRequest(BaseModel):
     video_model: Optional[str] = None
     enable_concurrency: Optional[bool] = True
     web_search: Optional[bool] = False
+    episodes: Optional[int] = 4
 
 class InterventionRequest(BaseModel):
     stage: str
-    modifications: Dict[str, Any] = {}
+    modifications: Dict[str, Any]
 
 
 # ============================== API ==============================
@@ -128,6 +129,7 @@ async def start_project(req: ProjectStartRequest):
         "video_model": req.video_model or settings.VIDEO_MODEL,
         "enable_concurrency": req.enable_concurrency if req.enable_concurrency is not None else True,
         "web_search": req.web_search if req.web_search is not None else False,
+        "episodes": req.episodes if req.episodes is not None else 4,
     }
     state.meta = meta
     workflow_engine.save_session_to_disk(session_id, meta)
@@ -140,6 +142,7 @@ async def start_project(req: ProjectStartRequest):
             "style": req.style,
             "llm_model": req.llm_model,
             "vlm_model": req.vlm_model,
+            "episodes": req.episodes,
         }
     }
 

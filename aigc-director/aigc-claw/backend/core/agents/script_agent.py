@@ -75,6 +75,7 @@ class ScriptWriterAgent(AgentInterface):
             style = input_data.get("style", "anime")
             llm_model = input_data.get("llm_model", "qwen3.5-plus")
             web_search = input_data.get("web_search", False)
+            episodes = input_data.get("episodes", 4)
             is_zh = any('\u4e00' <= c <= '\u9fff' for c in idea)
 
             from config import settings as app_settings
@@ -89,8 +90,8 @@ class ScriptWriterAgent(AgentInterface):
             # 1. Generate full script
             _log_progress(10, "正在生成完整剧本文本...")
             prompt_name = "generate_script"
-            prompt = _get_script_prompt(prompt_name, "zh" if is_zh else "en").format(idea=idea, style=style)
-            
+            prompt = _get_script_prompt(prompt_name, "zh" if is_zh else "en").format(idea=idea, style=style, episodes=episodes)
+
             loop = asyncio.get_running_loop()
             full_script_text = await loop.run_in_executor(None, self._cancellable_query, llm, prompt, [], llm_model, True, sid, web_search)
             logger.info(f"[ScriptWriter] Full script generated ({len(full_script_text)} chars)")

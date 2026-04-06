@@ -64,6 +64,7 @@ export async function startProject(params: {
   enable_concurrency?: boolean;
   web_search?: boolean;
   expand_idea?: boolean;
+  episodes?: number;
 }): Promise<{ session_id: string; status: string; params: any }> {
   const resp = await fetch('/api/project/start', {
     method: 'POST',

@@ -457,6 +457,7 @@ export default function WorkflowPanel() {
         enable_concurrency: params.enable_concurrency,
         web_search: params.web_search,
         expand_idea: params.expand_idea,
+        episodes: params.episodes,
       });
       setSessionId(result.session_id);
 
