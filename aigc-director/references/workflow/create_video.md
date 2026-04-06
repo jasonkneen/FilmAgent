@@ -20,12 +20,12 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/video_gener
 {
   "clips": [
     {
-      "scene_id": "1",
-      "shot_id": "1",
+      "id": "1-1",
       "description": "视频描述",
       "selected": "code/result/video/xxx/clip_001.mp4",
-      "versions": [...],
-      "status": "done|failed"
+      "versions": ["...", "..."],
+      "duration": 5,
+      "status": "done"
     }
   ]
 }
@@ -52,7 +52,7 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/video_gener
 
 收到此事件后，必须立即下载视频并发送给用户。
 
-## 停点9：视频片段生成完成，等待用户确认后继续下一阶段
+## 停点6：视频片段生成完成，等待用户确认后继续下一阶段
 
 **必须向用户发送消息**，展示每个视频片段：
 
@@ -60,14 +60,14 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/video_gener
 
 **发送消息时必须**：
 - 参考 [send_message/feishu.md](../send_message/feishu.md) 发送视频给用户
-- 每个视频片段需附带分镜编号和描述（如"场景1-分镜1：角色A走进咖啡馆"）
+- 每个视频片段需附带分镜编号（如"分镜1-1：角色A走进咖啡馆"）
 - 标注视频时长和状态（done/failed）
-- 按场景顺序依次发送
+- 按分镜 ID 顺序依次发送
 - **发送前端 URL**（获取本地 IPv4 地址，构造 `http://{local_ip}:3000/?session={session_id}&stage=video_generation`）
 - 发送完整列表后，询问用户确认
 
 询问内容示例：
-> "视频片段生成完成，共 X 个片段，Y 个成功。请确认是否继续进行后期剪辑？"
+> "视频片段生成完成，共 X 个片段。请确认是否继续进行后期剪辑？"
 
 ## 继续下一阶段
 

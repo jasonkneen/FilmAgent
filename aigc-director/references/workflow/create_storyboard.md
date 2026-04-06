@@ -22,39 +22,43 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/storyboard"
 
 ```json
 {
-  "shots": [
+  "episodes": [
     {
-      "scene_id": "1",
-      "shot_id": "1",
-      "duration": "5",
-      "characters": ["角色A"],
-      "location": "场景名",
-      "description": "分镜描述",
-      "visual_prompt": "视觉提示词"
+      "episode_number": 1,
+      "segments": [
+        {
+          "segment_id": "1-1",
+          "scene_name": "场景名",
+          "characters": ["角色A"],
+          "plot": "分镜描述",
+          "visual_prompt": "视觉提示词",
+          "duration": 5,
+          "setting_id": "set_xxx"
+        }
+      ]
     }
   ]
 }
 ```
 
-## 停点7：分镜设计完成，等待用户确认后继续下一阶段
+## 停点4：分镜设计完成，等待用户确认后继续下一阶段
 
 **必须向用户发送消息**，展示完整的分镜列表：
 
-从 `artifact.shots` 获取所有分镜数据，用表格形式展示：
+按剧集和分镜顺序展示：
 
-| 场景-分镜 | 时长 | 人物 | 地点 | 情节描述 |
-|-----------|------|------|------|----------|
-| 1-1 | 5s | 角色A, 角色B | 咖啡馆 | 两人在咖啡馆交谈 |
-| 1-2 | 3s | 角色A | 咖啡馆 | 角色A望向窗外 |
+| 剧集 | 分镜ID | 时长 | 人物 | 地点 | 情节描述 |
+|------|--------|------|------|------|----------|
+| 第1集 | 1-1 | 5s | 角色A | 咖啡馆 | 两人在咖啡馆交谈 |
 
 **发送消息时必须**：
 - 使用文字形式发送表格（参考 [send_message/feishu.md](../send_message/feishu.md)）
-- 包含总时长统计
+- 包含按剧集统计的时长
 - **发送前端 URL**（获取本地 IPv4 地址，构造 `http://{local_ip}:3000/?session={session_id}&stage=storyboard`）
 - 发送完整列表后，询问用户确认
 
 询问内容示例：
-> "分镜设计已完成，共 X 个分镜，总时长约 Y 秒。请确认是否继续生成参考图？"
+> "分镜设计已完成，共生成 X 集，总时长约 Y 秒。请确认是否继续生成参考图？"
 
 ## 继续下一阶段
 

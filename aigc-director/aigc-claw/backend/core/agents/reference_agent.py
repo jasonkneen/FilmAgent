@@ -558,11 +558,13 @@ class ReferenceGeneratorAgent(AgentInterface):
                 llm = LLM()
 
                 selected_images = {}
+                prompt_map = {}  # segment_id → first_frame_prompt
 
                 def regen_run():
                     total = len(regen_scenes)
                     done = 0
                     nonlocal selected_images
+                    nonlocal prompt_map
                     # 每片段5个步骤：准备(1)、生成(3)、完成(1)
                     steps_per_segment = 5
                     total_steps = total * steps_per_segment
@@ -571,7 +573,6 @@ class ReferenceGeneratorAgent(AgentInterface):
                         return min(2 + int(98 * step / total_steps), 100)
 
                     # 根据最新的 Segment 生成对应的 visual_prompt
-                    prompt_map = {}  # segment_id → first_frame_prompt
                     for i, segment_id in enumerate(regen_scenes):
                         seg = fresh_segment_map.get(segment_id, {})
                         

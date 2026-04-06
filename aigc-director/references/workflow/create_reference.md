@@ -18,13 +18,13 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/reference_g
 
 ```json
 {
-  "shots": [
+  "scenes": [
     {
-      "scene_id": "1",
-      "shot_id": "1",
+      "id": "1-1",
+      "description": "视觉提示词",
       "selected": "code/result/image/xxx/shot_001.png",
-      "versions": [...],
-      "visual_prompt": "优化后的视觉提示词"
+      "versions": ["...", "..."],
+      "status": "done"
     }
   ]
 }
@@ -51,16 +51,16 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/reference_g
 
 收到此事件后，必须立即下载图片并发送给用户。
 
-## 停点8：参考图生成完成，等待用户确认后继续下一阶段
+## 停点5：参考图生成完成，等待用户确认后继续下一阶段
 
 **必须向用户发送消息**，展示每个分镜的参考图：
 
-从 `artifact.shots[].selected` 获取每个分镜的参考图路径。
+从 `artifact.scenes[].selected` 获取每个分镜的参考图路径。
 
 **发送消息时必须**：
 - 参考 [send_message/feishu.md](../send_message/feishu.md) 发送图片给用户
-- 每张参考图需附带分镜编号和简短描述（如"场景1-分镜1：角色A在咖啡馆"）
-- 按场景顺序依次发送
+- 每张参考图需附带分镜编号（如"场景1-分镜1：角色A在咖啡馆"）
+- 按分镜 ID 顺序依次发送
 - **发送前端 URL**（获取本地 IPv4 地址，构造 `http://{local_ip}:3000/?session={session_id}&stage=reference_generation`）
 - 发送完整列表后，询问用户确认
 

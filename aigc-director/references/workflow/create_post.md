@@ -1,6 +1,6 @@
 # 后期剪辑
 
-执行第六阶段：将所有视频片段拼接成一个完整视频。
+执行第六阶段：将所有视频片段按剧集分组拼接成完整的各集视频。
 
 ## 请求
 
@@ -18,15 +18,28 @@ curl -X POST "http://localhost:8000/api/project/{session_id}/execute/post_produc
 
 ```json
 {
-  "final_video": "code/result/video/xxx/final.mp4"
+  "final_videos": [
+    {
+      "episode": 1,
+      "path": "code/result/video/xxx/output/xxx_ep1.mp4",
+      "name": "第 1 集"
+    },
+    {
+      "episode": 2,
+      "path": "code/result/video/xxx/output/xxx_ep2.mp4",
+      "name": "第 2 集"
+    }
+  ],
+  "final_video": "code/result/video/xxx/output/xxx_ep1.mp4"
 }
 ```
 
 ## 完成提示
 
 全部阶段完成后，告知用户：
-- 完整视频已生成
+- 各剧集的阶段视频已分别生成完毕
 - **发送前端 URL**（获取本地 IPv4 地址，构造 `http://{local_ip}:3000/?session={session_id}&stage=post_production`）
+- 提取所有的 `artifact.final_videos`，按集数依次**将生成的视频文件发送给用户**，并带上集数名称说明（如"第 1 集成片已生成"）
 - 提供 Web 界面链接供用户查看和下载
 
 ```bash

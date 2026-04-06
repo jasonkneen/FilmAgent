@@ -13,6 +13,7 @@ curl -X POST "http://localhost:8000/api/project/start" \
     "idea": "故事内容",
     "style": "anime",
     "video_ratio": "16:9",
+    "episodes": 4,
     "llm_model": "qwen3.5-plus",
     "vlm_model": "qwen-vl-plus",
     "image_t2i_model": "doubao-seedream-5-0",
@@ -28,76 +29,69 @@ curl -X POST "http://localhost:8000/api/project/start" \
 ```json
 {
   "session_id": "xxx",
-  "status": "idle",
-  "current_stage": "init"
+  "status": "stage_completed",
+  "params": {
+    "idea": "故事内容",
+    "style": "anime",
+    "llm_model": "qwen3.5-plus",
+    "vlm_model": "qwen-vl-plus",
+    "episodes": 4
+  }
 }
 ```
 
 ---
 
-## 参数说明
+## 停点流程
 
-| 参数 | 必填 | 说明 | 默认值 |
-|------|------|------|--------|
-| idea | ✅ | 故事创意/灵感 | - |
-| style | ✅ | 视频风格 | realistic |
-| video_ratio | | 视频比例 | 16:9 |
-| llm_model | | 剧本生成模型 | qwen3.5-plus |
-| vlm_model | | VLM 评估模型 | qwen-vl-plus |
-| image_t2i_model | | 文生图模型 | doubao-seedream-5-0 |
-| image_it2i_model | | 图生图模型 | doubao-seedream-5-0 |
-| video_model | | 视频生成模型 | wan2.6-i2v-flash |
-| enable_concurrency | | 开启并发生成 | true |
-| web_search | | 联网搜索 | false |
+本项目采用 **Agent 驱动的 6 阶段流水线**。系统在每一阶段完成后会进入 **停点 (Stop Event)**，等待用户确认后继续执行。
 
-### 可用风格
-
-`anime`, `realistic`, `comic-book`, `3d-disney`, `watercolor`, `oil-painting`, `cyberpunk`, `chinese-ink`
-
-### 可选视频比例
-
-6:9, 9:16, 1:1, 4:3, 3:4
-
-### 可用模型
-
-| 模块 | 模型 |
-|------|------|
-| LLM | qwen3.5-plus, deepseek-chat, gpt-4o, gemini-2.5-flash |
-| VLM | qwen-vl-plus, gemini-2.5-flash-image |
-| T2I | doubao-seedream-5-0, wan2.6-t2i, jimeng_t2i_v40 |
-| I2I | doubao-seedream-5-0, wan2.6-image |
-| Video | wan2.6-i2v-flash, kling-v3, jimeng_ti2v_v30_pro |
+| 阶段 | 停点 ID | 阶段内部步骤 (Phase) | 说明 |
+|------|---------|-----------------------|------|
+| 1 | 2 | script_generation | 剧本生成：产出全剧本、人物设定、环境设定 |
+| 2 | 3 | character_design | 角色/场景设计：为每个角色/场景生成参考图 |
+| 3 | 4 | storyboard | 分镜设计：将剧本拆分为具体镜头 (segments) |
+| 4 | 5 | reference_generation | 参考图生成：根据分镜生成首帧控制图 |
+| 5 | 6 | video_generation | 视频生成：根据参考图生成动态视频片段 |
+| 6 | - | post_production | 后期剪辑：按剧集拼接视频并生成最终成片 |
 
 ---
 
-## 询问用户示例
+## 全局监听：SSE 进度流
 
-在创建项目前，请向用户展示以下选项并让用户选择：
+启动项目后，**必须** 立即连接 SSE 端点以接收实时反馈：
 
-表格形式：
-| 配置项 | 选项 | 默认值（推荐） |
-|--------|------|---------------|
-| **视频风格 (style)** | anime, realistic, comic-book, 3d-disney, watercolor, oil-painting, cyberpunk, chinese-ink | realistic |
-| **视频比例 (video_ratio)** | 16:9（横屏）, 9:16（竖屏）, 1:1（方形）, 4:3, 3:4 | 16:9 |
-| **LLM 模型** | qwen3.5-plus, deepseek-chat, gpt-4o, gemini-2.5-flash | qwen3.5-plus |
-| **VLM 模型** | qwen-vl-plus, gemini-2.5-flash-image | qwen-vl-plus |
-| **T2I 模型** | doubao-seedream-5-0, wan2.6-t2i, jimeng_t2i_v40 | doubao-seedream-5-0 |
-| **I2I 模型** | doubao-seedream-5-0, wan2.6-image | doubao-seedream-5-0 |
-| **Video 模型** | wan2.6-i2v-flash, kling-v3, jimeng_ti2v_v30_pro | wan2.6-i2v-flash |
-| **联网搜索** | true, false | false |
-| **并发生成** | true, false | true |
+```bash
+# 执行第一阶段并获取进度
+curl -N "http://localhost:8000/api/project/{session_id}/execute/script_generation"
+```
 
-编号列表形式：
-1. 故事创意 (idea): [用户的创意内容]
-2. 视频风格 (style): realistic（默认值）
-   - 可选：anime, realistic, comic-book, 3d-disney, watercolor, oil-painting, cyberpunk, chinese-ink
-3. 视频比例 (video_ratio): 16:9（默认值）
-   - 可选：16:9, 9:16, 1:1, 4:3, 3:4
-4. LLM 模型: qwen3.5-plus（默认值）
+SSE 每个事件为一行 JSON：
+
+- `{"type": "progress", "percent": 10, "message": "正在生成剧本..."}`
+- `{"type": "stage_complete", "stage": "script_generation", "requires_intervention": true}`
+- `{"type": "error", "content": "..."}`
+
+---
+
+## 查看项目状态
+
+随时可以查看当前剧本、分镜或视频的状态：
+
+```bash
+curl "http://localhost:8000/api/project/{session_id}/status"
+```
+
+---
+
+## 下一步
+
+跳转到 [1. 生成剧本 (script_generation)](create_script.md)。
+5. LLM 模型: qwen3.5-plus（默认值）
    - 可选：qwen3.5-plus, deepseek-chat, gpt-4o, gemini-2.5-flash
-5. VLM 模型: qwen-vl-plus（默认值）
+6. VLM 模型: qwen-vl-plus（默认值）
    - 可选：qwen-vl-plus, gemini-2.5-flash-image
-6. T2I 模型: doubao-seedream-5-0（默认值）
+7. T2I 模型: doubao-seedream-5-0（默认值）
    - 可选：doubao-seedream-5-0, wan2.6-t2i, jimeng_t2i_v40
 7. I2I 模型: doubao-seedream-5-0（默认值）
    - 可选：doubao-seedream-5-0, wan2.6-image
@@ -128,6 +122,7 @@ curl -X POST "http://localhost:8000/api/project/start" \
 |--------|--------|
 | 故事创意 (idea) | [用户的创意内容] |
 | 视频风格 (style) | realistic（默认值）或其他用户选择 |
+| 剧集数量 (episodes)| 4（默认值）或其他用户选择 |
 | 视频比例 (video_ratio) | 16:9（默认值）或其他用户选择 |
 | LLM 模型 | qwen3.5-plus（默认值）或其他用户选择 |
 | VLM 模型 | qwen-vl-plus（默认值）或其他用户选择 |

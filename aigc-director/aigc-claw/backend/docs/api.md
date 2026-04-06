@@ -40,6 +40,7 @@ MovieAssistant 是一个 AI 视频生成系统，提供 REST API 供外部调用
 {
   "idea": "故事线描述",
   "style": "anime",
+  "episodes": 4,
   "llm_model": "qwen3.5-plus",
   "vlm_model": "qwen-vl-plus",
   "image_t2i_model": "doubao-seedream-5-0",
@@ -54,6 +55,7 @@ MovieAssistant 是一个 AI 视频生成系统，提供 REST API 供外部调用
 |------|------|------|------|--------|
 | idea | string | 是 | 故事线描述 | - |
 | style | string | 否 | 视频风格 | anime |
+| episodes | int | 否 | 生成的剧集数量 | 4 |
 | llm_model | string | 否 | LLM 模型 | qwen3.5-plus |
 | vlm_model | string | 否 | VLM 评估模型 | qwen-vl-plus |
 | image_t2i_model | string | 否 | 文生图模型 | doubao-seedream-5-0 |
@@ -65,11 +67,13 @@ MovieAssistant 是一个 AI 视频生成系统，提供 REST API 供外部调用
 ```json
 {
   "session_id": "1773208355389",
-  "status": "running",
+  "status": "stage_completed",
   "params": {
     "idea": "故事线描述",
     "style": "anime",
-    "llm_model": "gemini-3-flash-preview"
+    "llm_model": "gemini-3-flash-preview",
+    "vlm_model": "qwen-vl-plus",
+    "episodes": 4
   }
 }
 ```
@@ -159,11 +163,11 @@ MovieAssistant 是一个 AI 视频生成系统，提供 REST API 供外部调用
 {
   "stage": "script_generation",
   "artifact": {
-    "title": "影弑",
+    "title": "剧本名称",
     "logline": "...",
     "characters": [...],
     "settings": [...],
-    "scenes": [...]
+    "episodes": [...]
   }
 }
 ```
