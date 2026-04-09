@@ -28,7 +28,7 @@ interface HistoryItem {
   style?: string;
   date: string;
   status: string;
-  stages?: string[];
+  stages?: Record<string, string>;
 }
 
 interface HomePageProps {
@@ -38,15 +38,18 @@ interface HomePageProps {
   history: HistoryItem[];
 }
 
-/* 根据 stages_completed 生成进度文本 */
-function stageProgressLabel(stages?: string[]): { text: string; color: string } {
-  if (!stages || stages.length === 0) return { text: '未开始', color: 'text-gray-400' };
-  if (stages.length >= STAGES.length) return { text: '已完成', color: 'text-green-600' };
-  // 显示最后完成的阶段名称
-  const lastStageId = stages[stages.length - 1];
+/* 根据 status 映射生成进度文本 */
+function stageProgressLabel(statusMap?: Record<string, string>): { text: string; color: string } {
+  const map = statusMap || {};
+  const completed = Object.keys(map).filter(k => ["completed", "session_completed"].includes(map[k]));
+  if (completed.length === 0) return { text: '未开始', color: 'text-gray-400' };
+  if (completed.length >= STAGES.length) return { text: '已完成', color: 'text-green-600' };
+  
+  // 对比 STAGES 获取最后一个已完成的
+  const lastStageId = STAGES.filter(s => completed.includes(s.id)).pop()?.id || completed[completed.length - 1];
   const stageDef = STAGES.find(s => s.id === lastStageId);
   const name = stageDef?.shortName || lastStageId;
-  return { text: `已完成: ${name} (${stages.length}/${STAGES.length})`, color: 'text-blue-600' };
+  return { text: `已完成: ${name} (${completed.length}/${STAGES.length})`, color: 'text-blue-600' };
 }
 
 export default function HomePage({ onStartProject, onResumeProject, onDeleteSession, history }: HomePageProps) {
@@ -468,7 +471,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                         <span className="text-[10px] text-gray-400">{item.date}</span>
                       </div>
                       <div className={`flex items-center gap-1 mt-1.5 text-[10px] font-medium ${progress.color}`}>
-                        {item.stages && item.stages.length >= STAGES.length ? (
+                        {item.stages && Object.keys(item.stages).filter(k => ["completed", "session_completed"].includes(item.stages![k])).length >= STAGES.length ? (
                           <CheckCircle className="w-3 h-3" />
                         ) : (
                           <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />

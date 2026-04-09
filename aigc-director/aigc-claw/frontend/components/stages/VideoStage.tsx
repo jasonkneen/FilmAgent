@@ -145,7 +145,8 @@ function ClipRow({
   disabled?: boolean;
   isSaving?: boolean;
 }) {
-  const isPending = clip.status === 'pending' || isRegenerating;
+  const isRunning = clip.status === 'running' || isRegenerating;
+  const isPending = clip.status === 'pending';
   const isFailed = clip.status === 'failed' && !isRegenerating;
   const hasChanges = editDesc !== clip.description;
 
@@ -164,6 +165,9 @@ function ClipRow({
             <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{clip.duration}s</span>
           )}
           {isPending && (
+            <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">等待中</span>
+          )}
+          {isRunning && (
             <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">
               <Loader className="w-2.5 h-2.5 animate-spin" />生成中
             </span>
@@ -234,11 +238,17 @@ function ClipRow({
 
       {/* 右侧: 视频画廊 / 占位 */}
       <div className="flex-1 min-w-0 p-3 flex items-center">
-        {isPending && !clip.versions.length ? (
+        {isRunning && !clip.versions.length ? (
           <div className="flex items-center justify-center h-32 aspect-video bg-gray-50 rounded-lg border border-dashed border-gray-200">
             <div className="flex items-center gap-2 text-gray-400 text-xs px-4">
               <Loader className="w-4 h-4 animate-spin" />
               <span>正在生成视频...</span>
+            </div>
+          </div>
+        ) : isPending && !clip.versions.length ? (
+          <div className="flex items-center justify-center h-32 aspect-video bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
+            <div className="flex items-center gap-2 text-gray-400 text-xs px-4">
+              <span>等待生成视频...</span>
             </div>
           </div>
         ) : isFailed && !clip.versions.length ? (

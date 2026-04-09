@@ -1,4 +1,4 @@
-# 创建项目
+﻿# 创建项目
 
 创建一个新的视频生成项目。
 
@@ -29,7 +29,7 @@ curl -X POST "http://localhost:8000/api/project/start" \
 ```json
 {
   "session_id": "xxx",
-  "status": "stage_completed",
+  "status": "completed",
   "params": {
     "idea": "故事内容",
     "style": "anime",

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle, Circle, Loader, Edit3, AlertCircle, Square, Zap, Settings2, ChevronDown, Hexagon } from 'lucide-react';
@@ -48,7 +48,7 @@ interface TopBarProps {
   modelConfig?: ModelConfig;
   /** 模型配置变更 */
   onModelConfigChange?: (config: ModelConfig) => void;
-  /** 项目状态（如 running, waiting_in_stage, stage_completed, session_completed, idle, error 等） */
+  /** 项目状态（如 running, waiting, completed, completed, idle, error 等） */
   projectStatus?: string;
 }
 
@@ -330,23 +330,22 @@ export default function TopBar({
             className={clsx(
               'px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1',
               projectStatus === 'running' && 'bg-blue-50 text-blue-700',
-              projectStatus === 'waiting_in_stage' && 'bg-amber-50 text-amber-700',
-              projectStatus === 'stage_completed' && 'bg-green-50 text-green-700',
-              projectStatus === 'idle' && 'bg-gray-50 text-gray-600',
+              projectStatus === 'waiting' && 'bg-amber-50 text-amber-700',
+              projectStatus === 'completed' && 'bg-green-50 text-green-700',
+              projectStatus === 'pending' && 'bg-gray-50 text-gray-600',
               projectStatus === 'error' && 'bg-red-50 text-red-700',
               projectStatus === 'stopped' && 'bg-orange-50 text-orange-700'
             )}
             title="项目状态"
           >
             {projectStatus === 'running' && <Loader className="w-3 h-3 animate-spin" />}
-            {projectStatus === 'waiting_in_stage' && <Edit3 className="w-3 h-3" />}
+            {projectStatus === 'waiting' && <Edit3 className="w-3 h-3" />}
             {projectStatus === 'error' && <AlertCircle className="w-3 h-3" />}
             <span>
               {projectStatus === 'running' ? '执行中' :
-               projectStatus === 'waiting_in_stage' ? '等待确认' :
-               projectStatus === 'stage_completed' ? '阶段完成' :
-               projectStatus === 'session_completed' ? '已完成' :
-               projectStatus === 'idle' ? '空闲' :
+               projectStatus === 'waiting' ? '等待确认' :
+               projectStatus === 'completed' ? '已完成' :
+               projectStatus === 'pending' ? '空闲' :
                projectStatus === 'stopped' ? '已停止' :
                projectStatus === 'error' ? '出错' : projectStatus}
             </span>

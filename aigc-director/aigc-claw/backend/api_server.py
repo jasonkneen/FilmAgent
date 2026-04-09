@@ -114,7 +114,9 @@ async def start_project(req: ProjectStartRequest):
     session_id = str(int(time.time() * 1000))
     state = workflow_engine.get_or_create_state(session_id)
     state.started_at = __import__('datetime').datetime.now()
-    state.status = "stage_completed"
+    if not isinstance(state.status, dict):
+        state.status = {}
+    state.status[state.current_stage.value] = "completed"
 
     # 保存会话元数据（未传参数时使用 config.py 中的默认值）
     meta = {
@@ -418,24 +420,38 @@ async def update_artifact(session_id: str, stage: str, request: Request):
             if 'is_new' in shot:
                 shot['is_new'] = False
 
-        # 同步到 video_generation
-        shot_id_to_duration = {s['shot_id']: s.get('duration', 10) for s in body['shots'] if 'shot_id' in s}
-        shot_id_to_plot = {s['shot_id']: s.get('plot', '') for s in body['shots'] if 'shot_id' in s}
+        # 从 body['segments'] 提取同步信息（修改后的逻辑按 segment 同步）
+        seg_info_list = []
+        for seg in body.get('segments', []):
+            seg_id = seg.get('segment_id')
+            if not seg_id: continue
+            
+            shots = seg.get('shots', [])
+            desc_video = " ".join([sh.get("plot") or sh.get("content") or "" for sh in shots]).strip()
+            total_dur = seg.get("total_duration") or sum([sh.get("duration", 0) for sh in shots]) or 10
+            
+            seg_info_list.append({
+                "segment_id": seg_id,
+                "desc": desc_video,
+                "duration": total_dur
+            })
 
+        # 同步到 video_generation
         video_art = state.artifacts.get('video_generation', {})
         if isinstance(video_art, dict) and 'clips' in video_art:
             for clip in video_art['clips']:
-                shot_id = clip.get('id')
-                if shot_id in shot_id_to_duration:
-                    clip['duration'] = shot_id_to_duration[shot_id]
-                if shot_id in shot_id_to_plot:
-                    clip['description'] = shot_id_to_plot[shot_id]
+                c_id = clip.get('id')
+                # 匹配 segment_id
+                target = next((item for item in seg_info_list if item["segment_id"] == c_id), None)
+                if target:
+                    clip['duration'] = target['duration']
+                    clip['description'] = target['desc']
 
-        # 移除 shots，避免覆盖 storyboard artifact
-        body = {k: v for k, v in body.items() if k != "shots"}
+        # 移除 segments，避免覆盖 storyboard artifact
+        body = {k: v for k, v in body.items() if k != "segments"}
 
         # 清除 new_shot_ids 标记
-        if "new_shot_ids" in body and body.get('new_shot_ids') == []:
+        if "new_shot_ids" in body:
             del body['new_shot_ids']
 
     # ══════════════════════════════════════════════════════════════

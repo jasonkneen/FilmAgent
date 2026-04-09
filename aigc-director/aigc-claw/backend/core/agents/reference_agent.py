@@ -734,7 +734,15 @@ class ReferenceGeneratorAgent(AgentInterface):
                     first_frame_prompts[segment_id] = ff_prompt
                     logger.info(f"[{segment_id}] Prompt ready, starting image generation...")
 
-                    # 2. 立即提交图像生成任务，不再等待其他片段的提示词
+                    # 2. 发送任务开始状态 (Running)，以便前端 UI 立即显示加载状态
+                    self._report_progress("参考图", f"正在启动: {segment_id}", calc_pct(i * steps_per_segment), data={
+                        "asset_complete": {
+                            "type": "scenes", "id": segment_id,
+                            "status": "running"
+                        }
+                    })
+
+                    # 3. 立即提交图像生成任务，不再等待其他片段的提示词
                     refs = self._collect_refs(seg, asset_map, char_id_map, setting_id_map)
                     fut = executor.submit(
                         self._generate_one, img_client, sid,
@@ -745,9 +753,9 @@ class ReferenceGeneratorAgent(AgentInterface):
                     futs[fut] = segment_id
                     
                     # 报告进度（提交任务也算一点进度）
-                    self._report_progress("参考图", f"正在生成: {segment_id}", calc_pct(i * steps_per_segment))
+                    self._report_progress("参考图", f"等待生成: {segment_id}", calc_pct(i * steps_per_segment))
 
-                # 3. 等待所有任务完成
+                # 4. 等待所有任务完成
                 cancelled = False
                 for fut in as_completed(futs):
                     segment_id_done = futs[fut]

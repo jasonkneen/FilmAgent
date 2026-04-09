@@ -378,6 +378,13 @@ class VideoDirectorAgent(AgentInterface):
             with ThreadPoolExecutor(max_workers=concurrency) as executor:
                 futs = {}
                 for seg_id, prompt, img_path, dur in tasks:
+                    # 提交前立即发送正在运行的状态，让前端 UI 更新
+                    self._report_progress("视频生成", f"启动生成: {seg_id}", 5, data={
+                        "asset_complete": {
+                            "type": "clips", "id": seg_id,
+                            "status": "running"
+                        }
+                    })
                     fut = executor.submit(
                         self._generate_one, sid, seg_id, prompt,
                         img_path, video_model, dur,

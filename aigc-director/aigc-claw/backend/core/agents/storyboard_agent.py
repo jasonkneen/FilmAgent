@@ -24,10 +24,6 @@ def _get_shot_prompt(lang: str = "zh") -> str:
     from prompts.loader import load_prompt_with_fallback
     return load_prompt_with_fallback("storyboard", "shot", lang, "zh")
 
-def _get_continue_prompt(lang: str = "zh") -> str:
-    from prompts.loader import load_prompt_with_fallback
-    return load_prompt_with_fallback("storyboard", "continue", lang, "zh")
-
 class StoryboardAgent(AgentInterface):
     def __init__(self):
         super().__init__(name="Storyboard")
@@ -202,16 +198,13 @@ class StoryboardAgent(AgentInterface):
             
             if not extracted:
                 logger.error(f"LLM output failed to parse as JSON for Episode {ep_n} after {max_retries} attempts. Raw: {raw}")
-                return {
-                    "episode_number": ep_n,
-                    "episode_title": ep_t,
-                    "segments": []
-                }
+                # 抛出异常以触发 orchestrator 的错误状态处理逻辑
+                raise Exception(f"第 {ep_n} 集分镜生成失败：模型输出无法解析")
                 
-            # 我们直接手动处理 segments
             valid_segments = []
             for i, seg in enumerate(extracted, 1):
                 if not isinstance(seg, dict): continue
+                
                 shots = seg.get("shots", [])
                 valid_shots = []
                 calc_total_duration = 0
@@ -225,12 +218,13 @@ class StoryboardAgent(AgentInterface):
                         "duration": dur,
                         "content": s.get("content", "")
                     })
+                
                 valid_segments.append({
-                    "segment_id": f"seg_{ep_n:02d}_{i:02d}",
-                    "segment_number": i,
+                    "segment_id": seg.get("segment_id", f"seg_{ep_n:02d}_{i:02d}"),
+                    "segment_number": seg.get("segment_number", len(valid_segments) + 1),
+                    "total_duration": seg.get("total_duration", calc_total_duration),
                     "location": seg.get("location", ""),
                     "characters": seg.get("characters", []),
-                    "total_duration": seg.get("total_duration", calc_total_duration),
                     "shots": valid_shots,
                     "episode_number": ep_n
                 })
@@ -241,14 +235,39 @@ class StoryboardAgent(AgentInterface):
                 "segments": valid_segments
             }
 
-        # 并发处理新增集数
-        new_story_results = await asyncio.gather(*(proc_ep(ep) for ep in episodes_to_proc))
-        
-        # 合并旧数据和新数据
+        # 核心：支持流式保存增量产物，让前端能看到实时进度
         updated_ep_map = {e["episode_number"]: e for e in existing_story_eps}
-        for res in new_story_results:
+        
+        # 立即先保存一次，确保已有的 episodes 在进入 running 状态后依然可见
+        session_data.setdefault("artifacts", {})["storyboard"] = {
+            "session_id": sid, 
+            "episodes": sorted(updated_ep_map.values(), key=lambda x: x["episode_number"]),
+            "created_at": datetime.now().isoformat()
+        }
+        with open(session_file, "w", encoding="utf-8") as f:
+            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        # 报告一次进度，带上 asset_complete 强制前端从磁盘刷新一次初步数据
+        self._report_progress("分镜设计", "准备生成分镜...", 10, {"asset_complete": True})
+
+        results_queue = [proc_ep(ep) for ep in episodes_to_proc]
+
+        for coro in asyncio.as_completed(results_queue):
+            res = await coro
             updated_ep_map[res["episode_number"]] = res
             
+            # 每完成一集分镜，立即持久化并触发增量同步
+            temp_eps = sorted(updated_ep_map.values(), key=lambda x: x["episode_number"])
+            session_data.setdefault("artifacts", {})["storyboard"] = {
+                "session_id": sid, 
+                "episodes": temp_eps, 
+                "created_at": datetime.now().isoformat()
+            }
+            with open(session_file, "w", encoding="utf-8") as f:
+                json.dump(session_data, f, indent=2, ensure_ascii=False)
+            
+            # 报告带有 asset_complete 的进度，强制编排器刷新前端数据
+            self._report_progress("分镜设计", f"集数 {res['episode_number']} 分镜已生成", 50, {"asset_complete": True})
+
         final_all_episodes = sorted(updated_ep_map.values(), key=lambda x: x["episode_number"])
         
         # 核心：将结果持久化到 artifacts.storyboard
@@ -258,10 +277,6 @@ class StoryboardAgent(AgentInterface):
             "created_at": datetime.now().isoformat()
         }
         
-        # 更新会话状态
-        if "storyboard" not in session_data.get("stages_completed", []):
-            session_data.setdefault("stages_completed", []).append("storyboard")
-        session_data["status"] = "stage_completed"
         session_data["updated_at"] = datetime.now().timestamp()
 
         with open(session_file, "w", encoding="utf-8") as f: 

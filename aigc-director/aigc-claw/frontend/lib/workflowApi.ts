@@ -19,9 +19,8 @@ export interface StageInfo {
 export interface ProjectStatus {
   session_id: string;
   current_stage: string;
-  status: string;
+  status: Record<string, string>;
   error: string | null;
-  stages_completed: string[];
 }
 
 export interface StreamEvent {

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -47,7 +47,7 @@ interface HistoryItem {
   style?: string;
   date: string;
   status: string;
-  stages?: string[];  // stages_completed 列表
+  stages?: Record<string, string>; // stageId => status 映射
 }
 
 function initStageStates(): Record<string, StageState> {
@@ -107,9 +107,11 @@ export default function WorkflowPanel() {
           status = await getProjectStatus(sid);
         }
         if (pollRef.current !== key) return;
-        const done = status.stages_completed || [];
+        setGlobalStatusMap(status.status || {});
+        const done = Object.keys(status.status || {}).filter(k => ["completed", "session_completed"].includes(status.status[k]));
+        const currentStageStatus = status.status?.[stageId] || 'idle';
         if (done.includes(stageId)) {
-          const isWait = status.status === 'waiting_in_stage' && status.current_stage === stageId;
+          const isWait = currentStageStatus === 'waiting' && status.current_stage === stageId;
           let artifact = null;
           try { artifact = (await getArtifact(sid, stageId)).artifact; } catch {}
           updateStageState(stageId, {
@@ -121,7 +123,7 @@ export default function WorkflowPanel() {
           pollRef.current = null;
           return;
         }
-        if (status.status === 'error') {
+        if (currentStageStatus === 'error') {
           updateStageState(stageId, {
             status: 'error',
             error: status.error || '执行出错',
@@ -130,7 +132,7 @@ export default function WorkflowPanel() {
           pollRef.current = null;
           return;
         }
-        if (status.status === 'stopped') {
+        if (currentStageStatus === 'stopped') {
           updateStageState(stageId, {
             status: 'stopped',
             error: '手动停止',
@@ -139,8 +141,8 @@ export default function WorkflowPanel() {
           pollRef.current = null;
           return;
         }
-        // 如果后端状态不再是 running，提前停止轮询（比如变成了 waiting_intervention 或已完成）
-        if (status.status !== 'running') {
+        // 如果当前阶段不再是 running，提前停止轮询（比如变成了 waiting_intervention 或已完成）
+        if (currentStageStatus !== 'running') {
           pollRef.current = null;
           return;
         }
@@ -148,6 +150,11 @@ export default function WorkflowPanel() {
         const artifacts = status.artifacts || {};
         const currentArtifact = artifacts[stageId];
         const update: Partial<StageState> = {};
+
+        // 无论何种状态，只要有数据就更新 artifact
+        if (currentArtifact) {
+          update.artifact = currentArtifact;
+        }
 
         // 始终设置状态为 running（如果尚未设置）
         const currentState = stageStates[stageId];
@@ -157,9 +164,10 @@ export default function WorkflowPanel() {
         }
 
         if (currentArtifact) {
-          // 检查是否有已生成的参考图/视频
+          // 检查是否有已生成的参考图/视频/分镜
           const hasProgress = currentArtifact.scenes?.some((s: any) => s.versions?.length > 0) ||
                              currentArtifact.clips?.some((c: any) => c.versions?.length > 0) ||
+                             currentArtifact.episodes?.some((e: any) => e.segments?.length > 0) ||
                              currentArtifact.characters?.length > 0 ||
                              currentArtifact.shots?.length > 0;
           if (hasProgress) {
@@ -201,8 +209,8 @@ export default function WorkflowPanel() {
             date: s.date
               ? new Date(s.date * 1000).toLocaleDateString('zh-CN')
               : '',
-            status: (s.stages?.length || 0) > 0 ? 'partial' : 'new',
-            stages: s.stages || [],
+            status: Object.keys(s.status || {}).length > 0 ? 'partial' : 'new',
+            stages: s.status || {},
           }))
         );
       })
@@ -469,7 +477,7 @@ export default function WorkflowPanel() {
           style: params.style,
           date: new Date().toLocaleDateString('zh-CN'),
           status: 'running',
-          stages: [],
+          stages: {},
         },
         ...prev,
       ]);
@@ -504,9 +512,11 @@ export default function WorkflowPanel() {
         }
 
         const status = await getProjectStatus(result.session_id);
-        // waiting_in_stage: 等待用户介入（如选择角色/图片），不能自动 continue
-        // stage_completed: 阶段完成，等待确认进入下一阶段
-        if (status.status === 'stage_completed') {
+        const stageStatus = status?.status?.[stageId];
+        setGlobalStatusMap(status.status || {});
+        // waiting: 等待用户介入（如选择角色/图片），不能自动 continue
+        // completed: 阶段完成，等待确认进入下一阶段
+        if (stageStatus === 'completed' || stageStatus === 'session_completed') {
           if (useAutoMode) {
             // 代理模式：自动确认并继续
             await continueWorkflow(result.session_id);
@@ -517,7 +527,7 @@ export default function WorkflowPanel() {
             setIsRunning(false);
             return;
           }
-        } else if (status.status === 'waiting_in_stage') {
+        } else if (stageStatus === 'waiting') {
           // 用户需要介入，停止自动执行
           updateStageState(stageId, { status: 'waiting' });
           setActiveStage(stageId);
@@ -538,10 +548,13 @@ export default function WorkflowPanel() {
     setIsRunning(true);
 
     try {
-      const result = await continueWorkflow(sessionId);
+      const result: any = await continueWorkflow(sessionId);
       updateStageState(stageId, { status: 'completed', progressMessage: '已确认' });
 
       // 更新顶栏状态
+      if (result.status_map) {
+        setGlobalStatusMap(result.status_map);
+      }
       setCompletedStagesFromSession(prev => [...prev, stageId]);
       if (result.next_stage) {
         setCurrentStageFromSession(result.next_stage);
@@ -605,9 +618,11 @@ export default function WorkflowPanel() {
           await runStage(sessionId, nextStage, inputData);
 
           const status = await getProjectStatus(sessionId);
-          // waiting_in_stage: 等待用户介入（如选择角色/图片），不能自动 continue
-          // stage_completed: 阶段完成，等待确认进入下一阶段，可以自动 continue
-          if (status.status === 'stage_completed') {
+          setGlobalStatusMap(status.status || {});
+          const nStageStatus = status?.status?.[nextStage];
+          // waiting: 等待用户介入（如选择角色/图片），不能自动 continue
+          // completed: 阶段完成，等待确认进入下一阶段，可以自动 continue
+          if (nStageStatus === 'completed' || nStageStatus === 'session_completed') {
             if (autoMode) {
               await continueWorkflow(sessionId);
               updateStageState(nextStage, { status: 'completed', progressMessage: '已自动确认' });
@@ -620,7 +635,7 @@ export default function WorkflowPanel() {
               setActiveStage(nextStage);
               break;
             }
-          } else if (status.status === 'waiting_in_stage') {
+          } else if (nStageStatus === 'waiting') {
             // 用户需要介入，停止自动执行
             updateStageState(nextStage, { status: 'waiting' });
             setCurrentStageFromSession(nextStage);
@@ -826,46 +841,54 @@ export default function WorkflowPanel() {
         const oldScenes = (oldRefArtifact?.scenes || []) as any[];
         const oldScenesMap = new Map(oldScenes.map((s: any) => [s.id, s]));
 
-        // 使用 original_shots（保留 is_new 标记）构建第4阶段 scenes
-        const sourceShots = patch.original_shots || patch.shots || [];
-        console.log('[handleSaveSelections] sourceShots:', sourceShots);
-        const newScenes = sourceShots.map((shot: any, idx: number) => {
-          const oldScene = oldScenesMap.get(shot.shot_id) as any;
-          const isNew = shot.is_new;
-          // 如果是新分镜，使用空值；否则保留原有的 selected/versions
+        // 使用 segments 构建第4阶段 scenes 和第5阶段 clips
+        const sourceSegments = patch.segments || [];
+        console.log('[handleSaveSelections] sourceSegments:', sourceSegments);
+        
+        const newScenes = sourceSegments.map((seg: any, idx: number) => {
+          const seg_id = seg.segment_id;
+          const oldScene = oldScenesMap.get(seg_id) as any;
+          const isNew = seg.is_new;
+          
+          const shots = seg.shots || [];
+          const desc_ref = shots.map((sh: any) => sh.visual_prompt || sh.plot || sh.content || '').join(' ').trim();
+          
           return {
-            id: shot.shot_id,
-            name: `场景${shot.scene_number}-镜头${shot.shot_number}`,
+            id: seg_id,
+            name: `片段_${seg_id}`,
             index: idx + 1,
-            description: shot.visual_prompt || '',
-            duration: shot.duration || 10,
+            description: desc_ref,
             selected: isNew ? '' : (oldScene?.selected || ''),
             versions: isNew ? [] : (oldScene?.versions || []),
             status: isNew ? 'pending' : 'done',
           };
         });
-        console.log('[handleSaveSelections] newScenes:', newScenes);
 
         // 更新第4阶段的 artifact
         updateStageState('reference_generation', {
           artifact: { session_id: sessionId, scenes: newScenes },
           status: 'completed'
         });
-        console.log('[handleSaveSelections] 第4阶段已更新');
 
         // 同步更新第5阶段（video_generation）
         const oldVidArtifact = stageStates['video_generation']?.artifact;
         const oldClips = (oldVidArtifact?.clips || []) as any[];
         const oldClipsMap = new Map(oldClips.map((c: any) => [c.id, c]));
 
-        const newClips = sourceShots.map((shot: any, idx: number) => {
-          const oldClip = oldClipsMap.get(shot.shot_id) as any;
+        const newClips = sourceSegments.map((seg: any, idx: number) => {
+          const seg_id = seg.segment_id;
+          const oldClip = oldClipsMap.get(seg_id) as any;
+          
+          const shots = seg.shots || [];
+          const desc_video = shots.map((sh: any) => sh.plot || sh.content || '').join(' ').trim();
+          const total_dur = seg.total_duration || shots.reduce((acc: number, sh: any) => acc + (sh.duration || 0), 0) || 10;
+
           return {
-            id: shot.shot_id,
-            name: `场景${shot.scene_number}-镜头${shot.shot_number}`,
+            id: seg_id,
+            name: `片段_${seg_id}`,
             index: idx + 1,
-            description: shot.visual_prompt || '',
-            duration: shot.duration || 10,
+            description: desc_video,
+            duration: total_dur,
             selected: oldClip?.selected || '',
             versions: oldClip?.versions || [],
             status: 'pending',
@@ -935,7 +958,7 @@ export default function WorkflowPanel() {
       await runStage(sessionId, stageId, inputData);
 
       const status = await getProjectStatus(sessionId);
-      if (status.status === 'waiting_in_stage') {
+      if (status?.status?.[stageId] === 'waiting') {
         updateStageState(stageId, { status: 'waiting' });
         setActiveStage(stageId);
       }
@@ -969,47 +992,48 @@ export default function WorkflowPanel() {
       } catch {
         status = await getProjectStatus(sid);
       }
+      setGlobalStatusMap(status.status || {});
       const newStates = initStageStates();
-      const completedStages = status.stages_completed || [];
+      const stMap = status.status || {};
+      const allStatusStages = Object.keys(stMap);
       const currentStage = status.current_stage;
-      const isWaiting = status.status === 'waiting_in_stage';
+      
       // 保存到 state 供顶栏流程图使用
       setCurrentStageFromSession(currentStage || null);
+      const completedStages = allStatusStages.filter(k => ["completed", "session_completed"].includes(stMap[k]));
       setCompletedStagesFromSession(completedStages);
 
-      for (const cs of completedStages) {
-        const isCurrentWaiting = cs === currentStage && isWaiting;
-        newStates[cs] = {
-          status: isCurrentWaiting ? 'waiting' : 'completed',
-          progress: 100,
-          progressMessage: isCurrentWaiting ? '等待确认' : '已完成',
-          artifact: null,
-          error: null,
-        };
-        try {
-          const artResult = await getArtifact(sid, cs);
-          newStates[cs].artifact = artResult.artifact;
-        } catch { /* ignore */ }
-      }
+      for (const sName of allStatusStages) {
+        const cStatus = stMap[sName];
+        if (cStatus === 'pending' || cStatus === 'idle') {
+          // 即使是 pending，如果 artifacts 中有数据，也尝试恢复数据（用于初始占位显示）
+          if (status.artifacts?.[sName]) {
+            newStates[sName].artifact = status.artifacts[sName];
+          }
+          continue;
+        }
 
-      // 如果 current_stage 不在 completedStages 中，也需要显示（可能是 stage_completed、running, stopped, 或 error 状态）
-      if (currentStage && !completedStages.includes(currentStage)) {
-        const isError = status.status === 'error';
-        const isWaiting = status.status === 'waiting_in_stage';
-        const isCompleted = status.status === 'stage_completed';
-        const isStopped = status.status === 'stopped';
-        
-        newStates[currentStage] = {
-          status: isError ? 'error' : (isWaiting ? 'waiting' : (isCompleted ? 'completed' : (isStopped ? 'stopped' : 'running'))),
-          progress: 100,
-          progressMessage: isError ? '执行失败' : (isWaiting ? '等待确认' : (isCompleted ? '已完成' : (isStopped ? '已停止' : '进行中'))),
-          artifact: null,
+        const isCompleted = ["completed", "session_completed"].includes(cStatus);
+        const isError = cStatus === 'error';
+        const isWaiting = cStatus === 'waiting';
+        const isStopped = cStatus === 'stopped';
+        const isRunningStatus = cStatus === 'running';
+
+        newStates[sName] = {
+          status: isError ? 'error' : (isWaiting ? 'waiting' : (isStopped ? 'stopped' : (isCompleted ? 'completed' : 'running'))),
+          progress: isCompleted ? 100 : 0,
+          progressMessage: isError ? '执行失败' : (isWaiting ? '等待确认' : (isStopped ? '已停止' : (isCompleted ? '已完成' : (isRunningStatus ? '执行中...' : '进行中')))),
+          artifact: status.artifacts?.[sName] || null,
           error: isError ? (status.error || '执行出错') : (isStopped ? '手动停止' : null),
         };
-        try {
-          const artResult = await getArtifact(sid, currentStage);
-          newStates[currentStage].artifact = artResult.artifact;
-        } catch { /* ignore */ }
+        
+        // 如果内存中没有，尝试异步拉取
+        if (!newStates[sName].artifact) {
+          try {
+            const artResult = await getArtifact(sid, sName);
+            newStates[sName].artifact = artResult.artifact;
+          } catch { /* ignore */ }
+        }
       }
 
       // 恢复项目参数（从顶层字段读取，sessions json 中模型参数是顶层字段）
@@ -1039,7 +1063,7 @@ export default function WorkflowPanel() {
       setStageStates(newStates);
 
       // 轮询当前正在执行的阶段（仅当该阶段有 artifact 数据时）
-      if (status.status === 'running' && currentStage && !completedStages.includes(currentStage)) {
+      if (currentStage && stMap[currentStage] === 'running') {
         pollForCompletion(sid, currentStage);
       }
     } catch {
@@ -1093,34 +1117,30 @@ export default function WorkflowPanel() {
     : undefined;
 
   // ── 计算 stageStatuses for TopBar ──
-  // 根据 session 的 current_stage 和 stages_completed 判断图标状态
+  // 直接根据后端返回的 status 数据计算图标状态
+  const [globalStatusMap, setGlobalStatusMap] = useState<Record<string, string>>({});
+  
   const stageStatuses: Record<string, StageStatus> = {};
-  const currentIdx = STAGE_ORDER.indexOf(currentStageFromSession || '');
 
   for (let i = 0; i < STAGE_ORDER.length; i++) {
     const s = STAGE_ORDER[i];
+    const backendStatus = globalStatusMap[s]; // get status from global mapping updated from backend
 
-    if (i < currentIdx) {
-      // current_stage 之前的阶段：已完成（绿色对勾）
+    if (backendStatus === 'completed') {
       stageStatuses[s] = 'completed';
-    } else if (i > currentIdx) {
-      // current_stage 之后的阶段
-      if (completedStagesFromSession.includes(s)) {
-        // 在 stages_completed 中（黄色图案）
-        stageStatuses[s] = 'waiting';
-      } else {
-        // 不在 stages_completed 中：pending
-        stageStatuses[s] = 'pending';
-      }
+    } else if (backendStatus === 'waiting') {
+      stageStatuses[s] = 'waiting';
+    } else if (backendStatus === 'running') {
+      stageStatuses[s] = 'running';
+    } else if (backendStatus === 'error') {
+      stageStatuses[s] = 'error';
     } else {
-      // current_stage 本身：根据 stageStates 判断
-      stageStatuses[s] = stageStates[s]?.status || 'pending';
-      if (stageStatuses[s] === 'stopped') stageStatuses[s] = 'stopped';
+      stageStatuses[s] = 'pending';
     }
   }
 
   // ── 计算项目状态 ──
-  // 后端状态: idle, running, waiting_in_stage, stage_completed, session_completed, error
+  // 后端状态: pending, running, waiting, completed, completed, error
   // 前端 StageStatus: pending, running, waiting, completed, error
   const hasRunning = Object.values(stageStates).some(s => s.status === 'running');
   const hasWaiting = Object.values(stageStates).some(s => s.status === 'waiting');
@@ -1129,16 +1149,16 @@ export default function WorkflowPanel() {
 
   let computedStatus: string;
   if (hasRunning) computedStatus = 'running';
-  else if (hasWaiting) computedStatus = 'waiting_in_stage';
+  else if (hasWaiting) computedStatus = 'waiting';
   else if (hasError) computedStatus = 'error';
   // Check if stopped in stageStates
   else if (Object.values(stageStates).some(s => s.status === 'stopped')) computedStatus = 'stopped';
   else if (allCompleted && stageStates[STAGE_ORDER[STAGE_ORDER.length - 1]]?.status === 'completed') {
-    computedStatus = 'session_completed';
+    computedStatus = 'completed';
   } else if (allCompleted) {
-    computedStatus = 'stage_completed';
+    computedStatus = 'completed';
   } else {
-    computedStatus = Object.values(stageStates).some(s => s.status === 'stopped') ? 'stopped' : 'idle';
+    computedStatus = Object.values(stageStates).some(s => s.status === 'stopped') ? 'stopped' : 'pending';
   }
 
   const projectStatus = sessionId ? computedStatus : undefined;
@@ -1254,3 +1274,4 @@ export default function WorkflowPanel() {
     </div>
   );
 }
+

@@ -162,8 +162,9 @@ export default function StoryboardStage({
     let totalSegments = 0;
     let totalDuration = 0;
     episodesToRender.forEach(ep => {
-      totalSegments += ep.segments.length;
-      ep.segments.forEach(seg => {
+      const segs = ep.segments || [];
+      totalSegments += segs.length;
+      segs.forEach(seg => {
         totalDuration += (seg.total_duration || 0);
       });
     });
@@ -246,7 +247,8 @@ export default function StoryboardStage({
         ) : (
           <div className="space-y-12">
             {episodesToRender.map((episode, epIdx) => {
-              const epTotalTime = episode.segments.reduce((sum, s) => sum + (s.total_duration || 0), 0);
+              const segs = episode.segments || [];
+              const epTotalTime = segs.reduce((sum, s) => sum + (s.total_duration || 0), 0);
               return (
                 <div key={epIdx} className="space-y-4">
                   {/* 一级：剧集抬头 (参考第一阶段) */}
@@ -262,7 +264,7 @@ export default function StoryboardStage({
 
                   {/* 二级：拍摄分段 */}
                   <div className="space-y-8 pl-1">
-                    {episode.segments.map((segment, segIdx) => (
+                    {segs.map((segment, segIdx) => (
                       <div key={segment.segment_id} className="space-y-3">
                         <div className="flex items-center justify-between bg-gray-50/50 rounded-lg px-4 py-2 border border-gray-100">
                           <div className="flex items-center gap-6">
@@ -272,17 +274,17 @@ export default function StoryboardStage({
                               <span className="text-sm font-bold text-gray-800">
                                 {isEditing ? (
                                   <input 
-                                    value={segment.location} 
+                                    value={segment.location || ''} 
                                     onChange={e => updateSegmentField(epIdx, segIdx, 'location', e.target.value)} 
                                     className="bg-transparent border-b border-gray-200 focus:border-violet-400 outline-none px-1" 
                                   />
-                                ) : segment.location}
+                                ) : (segment.location || '未知地点')}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <Users className="w-3.5 h-3.5 text-gray-400" />
                               <div className="flex gap-1.5">
-                                {segment.characters.map((c, i) => (
+                                {(segment.characters || []).map((c, i) => (
                                   <span key={i} className="px-2 py-0.5 bg-white border border-gray-200 text-xs text-gray-600 rounded font-bold">{c}</span>
                                 ))}
                               </div>
@@ -304,7 +306,7 @@ export default function StoryboardStage({
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                              {segment.shots.map((shot, sIdx) => {
+                              {(segment.shots || []).map((shot, sIdx) => {
                                 const decor = SHOT_TYPE_DECOR[shot.shot_type as keyof typeof SHOT_TYPE_DECOR] || SHOT_TYPE_DECOR['近景'];
                                 return (
                                   <tr key={sIdx} className="group hover:bg-gray-50/30 transition-colors">

@@ -153,7 +153,8 @@ function SceneRow({
   onToggleEdit?: () => void;
   getSelected: (scene: SceneItem) => string;
 }) {
-  const isPending = scene.status === 'pending' || isRegenerating;
+  const isRunning = scene.status === 'running' || isRegenerating;
+  const isPending = scene.status === 'pending';
   const isFailed = scene.status === 'failed' && !isRegenerating;
   const isPendingEmpty = scene.status === 'pending' && !scene.versions.length && !isRegenerating;
   const hasChanges = editDesc !== scene.description;
@@ -170,6 +171,9 @@ function SceneRow({
           </span>
           <span className="text-sm font-semibold text-gray-800 truncate">{scene.name || (scene as any).title || `片段 ${scene.index}`}</span>
           {isPending && (
+            <span className="text-[10px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded">等待中</span>
+          )}
+          {isRunning && (
             <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">
               <Loader className="w-2.5 h-2.5 animate-spin" />生成中
             </span>
@@ -246,11 +250,17 @@ function SceneRow({
               <span>生成首帧参考图</span>
             </div>
           </div>
-        ) : isPending && !scene.versions.length ? (
+        ) : isRunning && !scene.versions.length ? (
           <div className="flex items-center justify-center h-28 aspect-video bg-gray-50 rounded-lg border border-dashed border-gray-200">
             <div className="flex items-center gap-2 text-gray-400 text-xs">
               <Loader className="w-4 h-4 animate-spin" />
               <span>正在生成...</span>
+            </div>
+          </div>
+        ) : isPending && !scene.versions.length ? (
+          <div className="flex items-center justify-center h-28 aspect-video bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
+            <div className="flex items-center gap-2 text-gray-400 text-xs text-center px-4">
+              <span>等待生成...</span>
             </div>
           </div>
         ) : isFailed && !scene.versions.length ? (

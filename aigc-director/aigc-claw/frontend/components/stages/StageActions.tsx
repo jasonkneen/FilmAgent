@@ -47,14 +47,16 @@ export default function StageActions({
   // 是否是"重新生成"阶段（1）
   const isRegenStage = STAGES_WITH_NEXT_CHECK.includes(stageId);
 
-  // 重新生成/继续生成按钮：在 waiting / completed / error / stopped 状态下显示
-  const showRegen = !!onRegenerate && (status === 'waiting' || status === 'completed' || status === 'error' || status === 'stopped');
+  // 重新生成/继续生成按钮：在 != 'running' 状态下显示 (pending时也不会到这个组件)
+  const showRegen = !!onRegenerate && status !== 'running';
   
   // 按钮是否禁用逻辑
   let isButtonDisabled = isRunning;
-  if (!isRunning) {
-    if (isContinueStage && !hasPendingItems && status !== 'error') isButtonDisabled = true;
-    if (isRegenStage && hasNextStageStarted) isButtonDisabled = true;
+  if (!isRunning && stageId) {
+    // 除了第一阶段和第六阶段外，completed 状态下禁用继续生成
+    if (stageId !== 'script_generation' && stageId !== 'post_production' && status === 'completed') {
+      isButtonDisabled = true;
+    }
   }
 
   // 其余按钮在 waiting、running、completed、stopped 状态显示
