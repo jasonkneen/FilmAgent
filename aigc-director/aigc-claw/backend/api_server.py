@@ -159,6 +159,7 @@ async def start_project(req: ProjectStartRequest):
                 # 静默拼接到 idea 中
                 final_idea = f"{final_idea}\n\n{prompt_fragment}"
             logger.info(f"成功处理上传文件: {full_path}")
+            logger.debug(f"文件内容预览:\n{content[:500]}")  # 调试输出，查看提取的文本内容
         else:
             logger.warning(f"上传的文件未找到: {full_path}")
 
@@ -270,12 +271,19 @@ async def execute_stage(session_id: str, stage: str, request: Request):
     cancellation_check = lambda: stop_event.is_set() or session_stop.is_set()
 
     progress_events = queue.Queue()
+    event_trigger = asyncio.Event()
 
     def progress_callback(phase, step, percent, data=None):
         event = {"phase": phase, "step": step, "percent": percent}
         if data:
             event["data"] = data
         progress_events.put(event)
+        # 触发事件，通知 stream 循环有新进度
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(event_trigger.set)
+        except RuntimeError:
+            pass
 
     async def stream_execution():
         stage_enum = WorkflowStage(stage)
@@ -290,6 +298,17 @@ async def execute_stage(session_id: str, stage: str, request: Request):
             )
 
             while not task.done():
+                # 使用 wait_for 同时观察：1. 是否有新进度 (event_trigger.set) 2. 任务是否结束 3. 是否超时需要心跳
+                # 我们不再强制 sleep，而是被动等待事件
+                try:
+                    await asyncio.wait_for(event_trigger.wait(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # 15秒没动静，发送心跳保活
+                    yield json.dumps({"type": "heartbeat", "time": time.time()}) + "\n"
+                
+                # 重置触发器，开始批量处理当前队列中的进度
+                event_trigger.clear()
+
                 while not progress_events.empty():
                     try:
                         p = progress_events.get_nowait()
@@ -303,7 +322,6 @@ async def execute_stage(session_id: str, stage: str, request: Request):
                         if p.get("data"):
                             evt["data"] = p["data"]
                         yield json.dumps(evt) + "\n"
-                        await asyncio.sleep(0)  # 强制立即发送 SSE 事件
                     except queue.Empty:
                         break
 
@@ -311,9 +329,6 @@ async def execute_stage(session_id: str, stage: str, request: Request):
                     stop_event.set()
                     yield json.dumps({"type": "error", "content": "Client disconnected"}) + "\n"
                     return
-
-                yield json.dumps({"type": "heartbeat", "time": time.time()}) + "\n"
-                await asyncio.sleep(0.1)  # 减少心跳间隔，加快事件处理
 
             # Drain any remaining progress events after task completion
             while not progress_events.empty():
@@ -645,12 +660,19 @@ async def intervene(session_id: str, req: InterventionRequest, request: Request)
     cancellation_check = lambda: stop_event.is_set() or session_stop.is_set()
 
     progress_events = queue.Queue()
+    event_trigger = asyncio.Event()
 
     def progress_callback(phase, step, percent, data=None):
         event = {"phase": phase, "step": step, "percent": percent}
         if data:
             event["data"] = data
         progress_events.put(event)
+        # 触发事件回调
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(event_trigger.set)
+        except RuntimeError:
+            pass
 
     async def stream_intervention():
         stage_enum = WorkflowStage(req.stage)
@@ -678,6 +700,13 @@ async def intervene(session_id: str, req: InterventionRequest, request: Request)
             )
 
             while not task.done():
+                try:
+                    await asyncio.wait_for(event_trigger.wait(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield json.dumps({"type": "heartbeat", "time": time.time()}) + "\n"
+                
+                event_trigger.clear()
+
                 while not progress_events.empty():
                     try:
                         p = progress_events.get_nowait()
@@ -691,7 +720,6 @@ async def intervene(session_id: str, req: InterventionRequest, request: Request)
                         if p.get("data"):
                             evt["data"] = p["data"]
                         yield json.dumps(evt) + "\n"
-                        await asyncio.sleep(0)  # 强制立即发送 SSE 事件
                     except queue.Empty:
                         break
 
@@ -699,9 +727,6 @@ async def intervene(session_id: str, req: InterventionRequest, request: Request)
                     stop_event.set()
                     yield json.dumps({"type": "error", "content": "Client disconnected"}) + "\n"
                     return
-
-                yield json.dumps({"type": "heartbeat", "time": time.time()}) + "\n"
-                await asyncio.sleep(0.1)  # 减少心跳间隔，加快事件处理
 
             # Drain remaining
             while not progress_events.empty():

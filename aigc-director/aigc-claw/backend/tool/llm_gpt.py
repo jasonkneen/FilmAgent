@@ -15,7 +15,7 @@ class GPT:
         else:
             self.client = OpenAI(api_key=api_key, timeout=timeout)
         self.max_attempts = 10
-        self.max_tokens = 8192
+        self.max_tokens = 8000
 
     def query(self, prompt, image_urls=[], model="", web_search=False):
         self.model = model

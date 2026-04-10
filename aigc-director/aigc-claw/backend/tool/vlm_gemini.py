@@ -33,7 +33,7 @@ class GeminiVLClient:
             self.base_url = self.base_url.rstrip("/") + "/v1"
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.max_attempts = 10
-        self.max_tokens = 20000
+        self.max_tokens = 8000
 
     def _encode_image(self, image_path: str) -> str:
         """将本地图片编码为 base64"""

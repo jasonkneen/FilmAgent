@@ -34,7 +34,7 @@ class Gemini:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.max_attempts = 10
-        self.max_tokens = 8192
+        self.max_tokens = 8000
 
     def query(self, prompt: str, image_urls: List[str] = [], model: str = "gemini-2.5-flash") -> str:
         """
