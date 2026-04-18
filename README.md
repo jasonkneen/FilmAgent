@@ -60,37 +60,37 @@ AIGC-Claw 是一个面向创意视频生产的 AI 导演系统。**你只需要�
 <table>
   <tr>
     <td align="center" valign="top" width="25%">
-      <video src="https://github.com/user-attachments/assets/1d095b82-3a72-4acc-9ca1-3ff4a6189232" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/1d095b82-3a72-4acc-9ca1-3ff4a6189232" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/8d25f5a5-05dd-4253-8c47-712c949878d0"></video>
       <br><b>第 1 集</b><br>被优化
     </td>
     <td align="center" valign="top" width="25%">
-      <video src="https://github.com/user-attachments/assets/489c5343-6345-4bce-81dc-bf6012b9c1cf" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/489c5343-6345-4bce-81dc-bf6012b9c1cf" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/24f783f5-7a76-4ffc-ab3e-264e2ce2a198"></video>
       <br><b>第 2 集</b><br>深夜启程 首单突破
     </td>
     <td align="center" valign="top" width="25%">
-      <video src="https://github.com/user-attachments/assets/359809cf-678b-429c-bafa-55ff50fd3277" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/359809cf-678b-429c-bafa-55ff50fd3277" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/7a21ad67-9e70-4ace-936a-593f55e3e576"></video>
       <br><b>第 3 集</b><br>AI获投 旧主危机
     </td>
     <td align="center" valign="top" width="25%">
-      <video src="https://github.com/user-attachments/assets/5561a04a-5ab3-4099-bc63-2fdbcc48f8e9" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/5561a04a-5ab3-4099-bc63-2fdbcc48f8e9" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/393fe76e-134b-461b-82e9-8956ce65321f"></video>
       <br><b>第 4 集</b><br>收购星耀
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/ae4c3618-1990-4ff5-ad85-e09f23b08f7d" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/ae4c3618-1990-4ff5-ad85-e09f23b08f7d" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/405cf7ba-2cee-46c8-9579-a312cf634c02"></video>
       <br><b>第 5 集</b><br>收购清算 新生
     </td>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/4ddbb725-34d8-478b-97bc-5d7143f73101" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/4ddbb725-34d8-478b-97bc-5d7143f73101" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/de9210e4-6f07-487b-9f09-77dc9078cce4"></video>
       <br><b>第 6 集</b><br>新生 回望
     </td>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/1c1e5970-aaea-44ba-b041-5d551905bfde" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/1c1e5970-aaea-44ba-b041-5d551905bfde" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/a3ff09bc-b2cb-4f73-8905-ca08ab6c8de1"></video>
       <br><b>第 7 集</b><br>技术反噬
     </td>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/e56e6784-6e49-4891-b0bc-a32308dd2145" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/e56e6784-6e49-4891-b0bc-a32308dd2145" controls width="100%" preload="none" poster="https://github.com/user-attachments/assets/fd3ad96f-5cab-4d6e-8af8-5b3fb0ba32af"></video>
       <br><b>第 8 集</b><br>坚守伦理 共渡难关
     </td>
   </tr>
@@ -104,27 +104,27 @@ AIGC-Claw 是一个面向创意视频生产的 AI 导演系统。**你只需要�
 <table>
   <tr>
     <td align="center" valign="top" width="50%">
-      <video src="https://github.com/user-attachments/assets/1ffe7b06-73e9-44cd-ad3f-afced5239f97" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/1ffe7b06-73e9-44cd-ad3f-afced5239f97" controls width="100%" preload="none"></video>
       <br><b>第 1 集：最后一课</b>
     </td>
     <td align="center" valign="top" width="50%">
-      <video src="https://github.com/user-attachments/assets/7547e5d3-872c-4344-8727-ee2be109797d" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/7547e5d3-872c-4344-8727-ee2be109797d" controls width="100%" preload="none"></video>
       <br><b>第 2 集：清扫计划</b>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/affed408-4df7-4ce7-9681-8f4ed45a6fcf" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/affed408-4df7-4ce7-9681-8f4ed45a6fcf" controls width="100%" preload="none"></video>
       <br><b>第 3 集：临终托付</b>
     </td>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/dc7a85a8-6912-4443-a995-3d8f3ca30bc8" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/dc7a85a8-6912-4443-a995-3d8f3ca30bc8" controls width="100%" preload="none"></video>
       <br><b>第 4 集：生死问答</b>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <video src="https://github.com/user-attachments/assets/1fb889c5-0e2b-40fa-a438-7399322ada47" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/1fb889c5-0e2b-40fa-a438-7399322ada47" controls width="100%" preload="none"></video>
       <br><b>第 5 集：文明之光</b>
     </td>
     <td align="center" valign="top">
@@ -141,15 +141,15 @@ AIGC-Claw 是一个面向创意视频生产的 AI 导演系统。**你只需要�
 <table>
   <tr>
     <td align="center" valign="top" width="33%">
-      <video src="https://github.com/user-attachments/assets/63c2f33c-da50-44f0-8c26-a65611479d6a" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/63c2f33c-da50-44f0-8c26-a65611479d6a" controls width="100%" preload="none"></video>
       <br><b>伦敦疑云</b>
     </td>
     <td align="center" valign="top" width="33%">
-      <video src="https://github.com/user-attachments/assets/d7c65cad-05b9-46c8-ab0e-96e39909f978" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/d7c65cad-05b9-46c8-ab0e-96e39909f978" controls width="100%" preload="none"></video>
       <br><b>一条狗的使命</b>
     </td>
     <td align="center" valign="top" width="33%">
-      <video src="https://github.com/user-attachments/assets/ec67546e-2d3d-4b34-b1ad-7d860a9bc1aa" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/ec67546e-2d3d-4b34-b1ad-7d860a9bc1aa" controls width="100%" preload="none"></video>
       <br><b>无人机系荔枝来</b>
     </td>
   </tr>
