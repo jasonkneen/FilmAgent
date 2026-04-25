@@ -170,10 +170,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     # ── 测试参数（按需修改） ──
-    IMAGE_PATH = "code/result/image/test_avail/test_input.png"
+    # IMAGE_PATH = "code/result/image/test_avail/test_input.png"
+    IMAGE_PATH = "code/result/image/test_avail/test_input_human.jpg"
     OUTPUT_PATH = "code/result/video/test_avail/seedance_test_output.mp4"
-    PROMPT = ""
-    MODELS = ["doubao-seedance-2-0-fast-260128", "doubao-seedance-2-0-260128"]
+    PROMPT = "女生把财务报表交给男生，男生看到后喜极而泣"
+    # MODELS = ["doubao-seedance-2-0-fast-260128", "doubao-seedance-2-0-260128"]
+    MODELS = ["doubao-seedance-2-0-fast-260128"]
     DURATION = 5
 
     print("=== Seedance (ARK) 图生视频测试 ===")

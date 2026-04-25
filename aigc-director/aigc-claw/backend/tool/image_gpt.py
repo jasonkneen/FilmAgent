@@ -93,7 +93,6 @@ class ImageGPT:
                     prompt=prompt,
                     size=size,
                     quality=quality,
-                    thinking=False,
                     n=1,
                     extra_body=extra_body
                 )

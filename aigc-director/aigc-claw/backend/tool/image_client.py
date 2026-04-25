@@ -69,11 +69,11 @@ class ImageClient:
     def generate_image(self,
                        prompt: str,
                        image_paths: Optional[List[str]] = None,
-                       model: str = "wan2.6-t2i",
+                       model: str = "wan2.7-image",
                        save_dir: Optional[str] = None,
                        session_id: Optional[str] = None,
                        video_ratio: Optional[str] = "16:9",
-                       resolution: Optional[str] = "4K") -> List[str]:
+                       resolution: Optional[str] = "2K") -> List[str]:
         """
         Generate images based on prompt and optional reference images.
 
@@ -127,7 +127,7 @@ class ImageClient:
         size = size_map.get(video_ratio, size_map["16:9"]).get(resolution, "1920*1080")
 
         if not model:
-            model = "wan2.6-t2i"
+            model = "wan2.7-image"  # Default model
 
         if Config.PRINT_MODEL_INPUT:
             print("---- IMAGE GENERATION REQUEST ----")

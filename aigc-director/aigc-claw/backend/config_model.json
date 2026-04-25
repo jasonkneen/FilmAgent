@@ -209,21 +209,21 @@
       "name": "Kling V3",
       "provider": "kling",
       "type": ["video"],
-      "concurrency": 3,
+      "concurrency": 10,
       "price_per_second": 1.0
     },
     "kling-v2-6": {
       "name": "Kling V2.6",
       "provider": "kling",
       "type": ["video"],
-      "concurrency": 3,
+      "concurrency": 10,
       "price_per_second": 0.5
     },
     "kling-v2-5-turbo": {
       "name": "Kling V2.5 Turbo",
       "provider": "kling",
       "type": ["video"],
-      "concurrency": 3,
+      "concurrency": 10,
       "price_per_second": 0.3
     },
     "doubao-seedance-2-0-260128": {

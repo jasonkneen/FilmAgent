@@ -82,39 +82,61 @@ class ReferenceGeneratorAgent(AgentInterface):
     # ─── 素材匹配 ───
 
     @staticmethod
-    def _build_asset_map(sid: str) -> Dict[str, Dict[str, str]]:
-        """扫描阶段2生成的素材文件"""
-        base = os.path.join('code/result/image', str(sid), 'Assets')
+    def _build_asset_map(character_design: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+        """从阶段2生成的素材数据中构建映射，不再直接扫描磁盘"""
         am: Dict[str, Dict[str, str]] = {'characters': {}, 'settings': {}}
-        for sub, key in [('characters', 'characters'), ('settings', 'settings')]:
-            d = os.path.join(base, sub)
-            if os.path.isdir(d):
-                files = sorted(
-                    [f for f in os.listdir(d) if f.endswith('.png')],
-                    key=lambda f: os.path.getmtime(os.path.join(d, f))
-                )
-                for fn in files:
-                    name = os.path.splitext(fn)[0]
-                    base_id = re.sub(r'_v\d+$', '', name)
-                    am[key][base_id] = os.path.join(d, fn)
+        
+        # 处理角色
+        for char in character_design.get('characters', []):
+            cid = char.get('id') or char.get('character_id')
+            selected = char.get('selected')
+            if cid and selected:
+                am['characters'][cid] = selected
+                
+        # 处理场景
+        for setting in character_design.get('settings', []):
+            sid = setting.get('id') or setting.get('setting_id')
+            selected = setting.get('selected')
+            if sid and selected:
+                am['settings'][sid] = selected
+                
         return am
 
     def _collect_refs(self, segment: dict, asset_map: dict,
                       char_id_map: dict, setting_id_map: dict) -> List[str]:
         """为一个片段(Segment)收集参考原图路径（角色 + 场景素材）"""
         refs = []
+        # 1. 角色匹配
         for cn in segment.get('characters', []):
             cid = char_id_map.get(cn)
+            # 如果名称不直接匹配，尝试模糊匹配（部分包含）
+            if not cid:
+                for name, _id in char_id_map.items():
+                    if name in cn or cn in name:
+                        cid = _id
+                        break
+            
             if cid and cid in asset_map['characters']:
                 refs.append(os.path.abspath(asset_map['characters'][cid]))
                 logger.info(f"[{segment.get('segment_id', '')}] 添加角色参考图: {cn} -> {cid}")
+
+        # 2. 场景匹配
         loc = segment.get('location', '')
         set_id = setting_id_map.get(loc)
+        # 如果名称不直接匹配，尝试模糊匹配
+        if not set_id and loc:
+            for name, _id in setting_id_map.items():
+                if name in loc or loc in name:
+                    set_id = _id
+                    logger.info(f"[{segment.get('segment_id', '')}] 场景模糊匹配成功: {loc} -> {name} ({set_id})")
+                    break
+
         if set_id and set_id in asset_map['settings']:
             refs.append(os.path.abspath(asset_map['settings'][set_id]))
             logger.info(f"[{segment.get('segment_id', '')}] 添加场景参考图: {loc} -> {set_id}")
         else:
             logger.warning(f"[{segment.get('segment_id', '')}] 未找到场景参考图: location={loc}, set_id={set_id}, available_settings={list(asset_map['settings'].keys())}")
+        
         logger.info(f"[{segment.get('segment_id', '')}] 共收集 {len(refs)} 张参考图")
         return refs[:10]
 
@@ -131,7 +153,7 @@ class ReferenceGeneratorAgent(AgentInterface):
             cid = char_id_map.get(cn, '')
             if cid:
                 for c in character_json.get('characters', []):
-                    if c.get('id') == cid:
+                    if (c.get('id') or c.get('character_id')) == cid:
                         desc = c.get('description', '')
                         if desc:
                             char_descs.append(f"{cn}: {desc}")
@@ -143,7 +165,7 @@ class ReferenceGeneratorAgent(AgentInterface):
         setting_desc = ""
         if set_id:
             for s in character_json.get('settings', []):
-                if s.get('id') == set_id:
+                if (s.get('id') or s.get('setting_id')) == set_id:
                     setting_desc = s.get('description', '')
                     break
 
@@ -455,7 +477,7 @@ class ReferenceGeneratorAgent(AgentInterface):
         
         style = input_data.get("style", "anime")
         video_ratio = input_data.get("video_ratio", "16:9")
-        resolution = input_data.get("resolution", "4K")
+        resolution = input_data.get("resolution", "2K")
         llm_model = input_data.get("llm_model", "") or settings.LLM_MODEL
         t2i = input_data.get("image_t2i_model", "") or settings.IMAGE_T2I_MODEL
         it2i = input_data.get("image_it2i_model", "") or settings.IMAGE_IT2I_MODEL
@@ -514,13 +536,15 @@ class ReferenceGeneratorAgent(AgentInterface):
         # 构建 name → id 映射（用于素材匹配）
         char_id_map = {}
         for c in character_json.get('characters', []):
-            char_id_map[c['name']] = c.get('character_id', '')
+            chara_id = c.get('id') or c.get('character_id') or ''
+            char_id_map[c['name']] = chara_id
 
         setting_id_map = {}
         for s in character_json.get('settings', []):
-            setting_id_map[s['name']] = s.get('setting_id', '')
+            set_id = s.get('id') or s.get('setting_id') or ''
+            setting_id_map[s['name']] = set_id
 
-        asset_map = self._build_asset_map(sid)
+        asset_map = self._build_asset_map(character_json)
 
         # ═══ 介入：重新生成指定分段 ═══
         if intervention:

@@ -138,7 +138,7 @@ class CharacterDesignerAgent(AgentInterface):
             base_prompt = self._setting_prompt(name, desc, style)
 
         video_ratio = "16:9"
-        resolution = "4K"
+        resolution = "2K"
         current_prompt = base_prompt
 
         for iteration in range(max_iterations):
