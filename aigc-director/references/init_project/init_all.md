@@ -26,7 +26,27 @@ node --version
 npm --version
 ```
 
-## 初始化步骤
+## 一键初始化（推荐）
+
+在 `aigc-director/aigc-claw` 项目目录执行：
+
+```bash
+# macOS / Linux
+cd aigc-claw
+chmod +x install.sh
+./install.sh
+```
+
+Windows 执行：
+
+```bat
+cd aigc-claw
+install.bat
+```
+
+安装脚本会完成后端依赖、`.env` 初始化、前端依赖安装和前端 build。安装完成后，提醒用户编辑 `aigc-claw/backend/.env` 填入 API Key。
+
+## 手动初始化步骤
 
 ### 步骤1：初始化后端
 

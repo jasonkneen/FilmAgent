@@ -1,0 +1,213 @@
+import os
+import re
+
+from config import settings
+from models.llm_client import LLM
+
+from .api_media import generate_image_api
+from .storage import append_artifact, task_output_dir, update_task
+from .tts import generate_edge_tts
+from .utils import (
+    artifact,
+    concat_videos,
+    create_static_image_clip,
+    media_duration_seconds,
+    render_static_text_image,
+    run_blocking,
+    write_json,
+    write_text,
+)
+
+DEFAULT_STYLE_CONTROL = (
+    "Minimalist black-and-white matchstick figure style illustration, clean lines, simple sketch style"
+)
+
+def split_by_periods(text: str) -> list[str]:
+    parts = re.findall(r"[^。．.]+[。．.]?|[^。．.]+$", text.strip())
+    return [part.strip() for part in parts if part.strip()]
+
+
+def build_image_prompt(narration: str, style_control: str) -> str:
+    style = style_control.strip()
+    no_text_instruction = (
+        "Do not include any text, captions, logos, watermarks, labels, typography, "
+        "or written characters in the image."
+    )
+    if not style:
+        return f"{no_text_instruction}\n{narration}"
+    return f"{style}\n{no_text_instruction}\n{narration}"
+
+
+async def run(task_id: str, params: dict) -> tuple[dict, list[dict]]:
+    output_dir = task_output_dir(task_id)
+    os.makedirs(output_dir, exist_ok=True)
+
+    text = params.get("text") or params.get("topic") or ""
+    if not text.strip():
+        raise ValueError("standard pipeline requires narration text")
+
+    mode = params.get("mode") or "copy"
+    source_text = text.strip()
+    llm = None
+    llm_model = params.get("llm_model") or settings.LLM_MODEL
+    if mode == "inspiration":
+        update_task(task_id, progress=6, message="Writing narration from inspiration")
+        llm = LLM()
+        source_text = await run_blocking(
+            llm.query,
+            (
+                "请根据下面的创作灵感，写一段适合静态短视频的中文旁白文案。"
+                "要求语言口语化、有节奏感，按句号分成 4-8 句，只输出文案正文。\n"
+                f"创作灵感：{text}"
+            ),
+            model=llm_model,
+        )
+        source_text = source_text.strip()
+
+    narrations = split_by_periods(source_text)
+    if not narrations:
+        raise RuntimeError("No narration segments were generated.")
+
+    title = (params.get("title") or "").strip()
+    if not title:
+        update_task(task_id, progress=8, message="Generating title")
+        if llm is None:
+            llm = LLM()
+        title = await run_blocking(
+            llm.query,
+            f"为下面的静态短视频旁白生成一个简短中文标题，只输出标题：\n{source_text}",
+            model=llm_model,
+        )
+        title = title.strip().splitlines()[0]
+
+    style_control = (params.get("style_control") or params.get("negative_prompt") or DEFAULT_STYLE_CONTROL).strip()
+    video_ratio = params.get("video_ratio") or "9:16"
+    image_model = params.get("image_model") or params.get("image_workflow") or settings.IMAGE_T2I_MODEL
+    image_resolution = params.get("image_resolution") or "1080P"
+    enable_subtitles = bool(params.get("enable_subtitles", False))
+
+    image_prompts = [build_image_prompt(narration, style_control) for narration in narrations]
+    storyboard = {
+        "title": title,
+        "mode": mode,
+        "input_text": text,
+        "style_control": style_control,
+        "frames": [
+            {"index": idx + 1, "narration": narration, "image_prompt": image_prompts[idx]}
+            for idx, narration in enumerate(narrations)
+        ],
+    }
+    storyboard_path = write_json(os.path.join(output_dir, "storyboard.json"), storyboard)
+    narration_path = write_text(os.path.join(output_dir, "narration.txt"), "\n".join(narrations))
+
+    artifacts = [artifact(storyboard_path, "text", "storyboard"), artifact(narration_path, "text", "narration")]
+    for item in artifacts:
+        append_artifact(task_id, item)
+
+    images = []
+    for idx, prompt in enumerate(image_prompts, 1):
+        update_task(
+            task_id,
+            progress=10 + int(40 * idx / len(image_prompts)),
+            message=f"Generating image {idx}/{len(image_prompts)}",
+        )
+        image_path = await run_blocking(
+            generate_image_api,
+            prompt=prompt,
+            model=image_model,
+            output_dir=output_dir,
+            task_id=task_id,
+            video_ratio=video_ratio,
+            resolution=image_resolution,
+        )
+        images.append(image_path)
+        image_artifact = artifact(image_path, "image", f"image_{idx:02d}")
+        artifacts.append(image_artifact)
+        append_artifact(task_id, image_artifact)
+        storyboard["frames"][idx - 1]["image_path"] = image_path
+        write_json(storyboard_path, storyboard)
+
+    audios = []
+    for idx, narration in enumerate(narrations, 1):
+        update_task(
+            task_id,
+            progress=50 + int(20 * idx / len(narrations)),
+            message=f"Generating audio {idx}/{len(narrations)}",
+        )
+        audio_path = os.path.join(output_dir, f"audio_{idx:02d}.mp3")
+        await generate_edge_tts(
+            narration,
+            output_path=audio_path,
+            voice=params.get("tts_voice", "zh-CN-YunjianNeural"),
+            speed=float(params.get("tts_speed", 1.2)),
+        )
+        audios.append(audio_path)
+        audio_artifact = artifact(audio_path, "audio", f"audio_{idx:02d}")
+        artifacts.append(audio_artifact)
+        append_artifact(task_id, audio_artifact)
+        storyboard["frames"][idx - 1]["audio_path"] = audio_path
+        write_json(storyboard_path, storyboard)
+
+    videos = []
+    for idx, (image_path, audio_path) in enumerate(zip(images, audios), 1):
+        update_task(
+            task_id,
+            progress=70 + int(20 * idx / len(images)),
+            message=f"Creating static clip {idx}/{len(images)}",
+        )
+        duration = media_duration_seconds(audio_path) or 3.0
+        clip_image_path = image_path
+        if enable_subtitles:
+            captioned_image_path = os.path.join(output_dir, f"captioned_image_{idx:02d}.jpg")
+            clip_image_path = await run_blocking(
+                render_static_text_image,
+                image_path,
+                captioned_image_path,
+                subtitle=narrations[idx - 1],
+                title=title or None,
+                video_ratio=video_ratio,
+            )
+            captioned_artifact = artifact(clip_image_path, "image", f"captioned_image_{idx:02d}")
+            artifacts.append(captioned_artifact)
+            append_artifact(task_id, captioned_artifact)
+            storyboard["frames"][idx - 1]["captioned_image_path"] = clip_image_path
+        video_path = os.path.join(output_dir, f"video_{idx:02d}.mp4")
+        await run_blocking(
+            create_static_image_clip,
+            clip_image_path,
+            audio_path,
+            video_path,
+            video_ratio=video_ratio,
+            duration=duration,
+        )
+        videos.append(video_path)
+        video_artifact = artifact(video_path, "video", f"video_{idx:02d}")
+        artifacts.append(video_artifact)
+        append_artifact(task_id, video_artifact)
+        storyboard["frames"][idx - 1]["video_path"] = video_path
+        storyboard["frames"][idx - 1]["duration"] = duration
+        write_json(storyboard_path, storyboard)
+
+    video_only_path = None
+    video_only_path = concat_videos(videos, os.path.join(output_dir, "final.mp4"))
+    if not video_only_path:
+        raise RuntimeError("Static short-video generation did not produce a final video.")
+
+    final_path = video_only_path
+
+    final_artifact = artifact(final_path, "video", "final")
+    artifacts.append(final_artifact)
+    append_artifact(task_id, final_artifact)
+
+    write_json(storyboard_path, storyboard)
+    output = {
+        "title": title,
+        "storyboard_path": storyboard_path,
+        "narration_path": narration_path,
+        "images": images,
+        "audios": audios,
+        "videos": videos,
+        "video_only_path": video_only_path,
+        "final_video": final_path,
+    }
+    return output, artifacts

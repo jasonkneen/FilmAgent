@@ -1,8 +1,7 @@
 ﻿'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { CheckCircle, Circle, Loader, Edit3, AlertCircle, Square, Zap, Settings2, ChevronDown, Hexagon } from 'lucide-react';
-import Link from 'next/link';
+import { CheckCircle, Circle, Loader, Edit3, AlertCircle, Square, Zap, Settings2, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import { LLM_PROVIDERS, T2I_PROVIDERS, I2I_PROVIDERS, VIDEO_PROVIDERS, VLM_PROVIDERS, VIDEO_RATIOS, ProviderGroup } from '@/config/models';
 
@@ -226,7 +225,7 @@ export default function TopBar({
   };
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 flex-shrink-0 z-10">
+    <header className="min-h-14 bg-white border-b border-gray-200 flex items-center px-4 flex-shrink-0 z-10 min-w-0">
       {/* Logo & 名称 */}
       <button
         onClick={onHomeClick}
@@ -289,7 +288,7 @@ export default function TopBar({
       )}
 
       {/* 右侧控制区 */}
-      <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+      <div className="ml-auto flex min-w-0 items-center justify-end gap-2 flex-shrink-0">
         {/* 模型选择 */}
         {hasSession && modelConfig && onModelConfigChange && (
           <ModelSelector config={modelConfig} onChange={onModelConfigChange} />
@@ -352,16 +351,6 @@ export default function TopBar({
           </div>
         )}
 
-
-        {/* 临时工作台入口 */}
-        <Link
-          href="/sandbox"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-xs font-medium"
-          title="临时工作台"
-        >
-          <Hexagon className="w-3.5 h-3.5" />
-          <span>工作台</span>
-        </Link>
       </div>
     </header>
   );

@@ -38,6 +38,51 @@ export interface StreamEvent {
   data?: any;
 }
 
+export interface PipelineTask {
+  task_id: string;
+  pipeline: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | string;
+  progress?: number;
+  message?: string;
+  input?: Record<string, any>;
+  output?: Record<string, any>;
+  artifacts?: Array<{ kind: string; name?: string; path: string; exists?: boolean; created_at?: string }>;
+  error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  output_dir?: string;
+}
+
+export interface PipelineStartResponse {
+  task_id: string;
+  pipeline: string;
+  status: string;
+  metadata_url: string;
+  output_dir: string;
+}
+
+export interface PipelineTaskEvent {
+  type: 'snapshot' | 'progress' | 'artifact' | 'completed' | 'failed';
+  task_id: string;
+  status?: string;
+  progress?: number;
+  artifact?: { kind: string; name?: string; path: string; exists?: boolean; created_at?: string };
+}
+
+export interface ApiModelOption {
+  id: string;
+  label: string;
+  provider: string;
+  media_type: 'image' | 'video';
+  ability_type?: string;
+  ability_types?: string[];
+  adapter_ability_types?: string[];
+  input_modalities?: string[];
+  adapter_input_modalities?: string[];
+  api_contract_verified?: boolean;
+  capabilities?: Record<string, any>;
+}
+
 export async function fetchStages(): Promise<StageInfo[]> {
   const resp = await fetch('/api/stages');
   const data = await resp.json();
@@ -48,6 +93,98 @@ export async function fetchSessions(): Promise<any[]> {
   const resp = await fetch('/api/sessions');
   const data = await resp.json();
   return data.sessions || [];
+}
+
+async function postPipelineTask(path: string, params: Record<string, any>): Promise<PipelineStartResponse> {
+  const resp = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: '启动任务失败' }));
+    throw new Error(err.detail || '启动任务失败');
+  }
+  return resp.json();
+}
+
+export async function startStandardPipeline(params: Record<string, any>): Promise<PipelineStartResponse> {
+  return postPipelineTask('/api/pipelines/standard/tasks', params);
+}
+
+export async function startActionTransferPipeline(params: Record<string, any>): Promise<PipelineStartResponse> {
+  return postPipelineTask('/api/pipelines/action_transfer/tasks', params);
+}
+
+export async function startDigitalHumanPipeline(params: Record<string, any>): Promise<PipelineStartResponse> {
+  return postPipelineTask('/api/pipelines/digital_human/tasks', params);
+}
+
+export async function fetchPipelineTasks(limit = 100): Promise<PipelineTask[]> {
+  const resp = await fetch(`/api/tasks?limit=${limit}`);
+  if (!resp.ok) throw new Error('获取任务历史失败');
+  const data = await resp.json();
+  return data.tasks || [];
+}
+
+export async function fetchPipelineTask(taskId: string): Promise<PipelineTask> {
+  const resp = await fetch(`/api/tasks/${taskId}`);
+  if (!resp.ok) throw new Error('获取任务状态失败');
+  return resp.json();
+}
+
+export async function deletePipelineTask(taskId: string): Promise<void> {
+  const resp = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+  if (!resp.ok) throw new Error('删除任务失败');
+}
+
+export async function fetchApiModels(params: {
+  mediaType?: 'image' | 'video';
+  ability?: string;
+  verifiedOnly?: boolean;
+} = {}): Promise<ApiModelOption[]> {
+  const search = new URLSearchParams();
+  if (params.mediaType) search.set('media_type', params.mediaType);
+  if (params.ability) search.set('ability', params.ability);
+  if (params.verifiedOnly) search.set('verified_only', 'true');
+  const resp = await fetch(`/api/models${search.toString() ? `?${search.toString()}` : ''}`);
+  if (!resp.ok) throw new Error('获取模型列表失败');
+  const data = await resp.json();
+  return data.models || [];
+}
+
+export async function uploadPipelineMedia(file: File): Promise<{ filename: string; file_path: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const resp = await fetch('/api/upload_media', {
+    method: 'POST',
+    body: formData,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: '上传失败' }));
+    throw new Error(err.detail || '上传失败');
+  }
+  return resp.json();
+}
+
+export function subscribePipelineTask(
+  taskId: string,
+  onEvent: (event: PipelineTaskEvent) => void,
+  onError?: () => void,
+): () => void {
+  const source = new EventSource(`${STREAM_API_BASE}/api/tasks/${taskId}/events`);
+  source.onmessage = event => {
+    try {
+      onEvent(JSON.parse(event.data));
+    } catch {
+      // Ignore malformed stream events.
+    }
+  };
+  source.onerror = () => {
+    onError?.();
+    source.close();
+  };
+  return () => source.close();
 }
 
 export async function startProject(params: {

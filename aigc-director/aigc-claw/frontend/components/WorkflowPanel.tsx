@@ -1244,7 +1244,7 @@ export default function WorkflowPanel() {
   const showHome = activeStage === null;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-50/50">
+    <div className="flex h-screen w-full min-w-0 flex-col bg-gray-50/50">
       <TopBar
         activeStage={activeStage}
         stageStatuses={stageStatuses}
@@ -1260,7 +1260,7 @@ export default function WorkflowPanel() {
         projectStatus={projectStatus}
       />
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 min-w-0 overflow-hidden">
         {showHome ? (
           <HomePage
             onStartProject={handleStartProject}
@@ -1275,4 +1275,3 @@ export default function WorkflowPanel() {
     </div>
   );
 }
-

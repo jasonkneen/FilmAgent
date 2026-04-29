@@ -177,19 +177,19 @@ export default function StoryboardStage({
 
   return (
     <div className="flex flex-col h-full bg-white">
-      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+      <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
         {/* 标题栏 */}
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex flex-col">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-6">
+          <div className="flex min-w-0 flex-col">
             <h2 className="text-lg font-semibold text-gray-800">分镜设计</h2>
             <p className="text-sm text-gray-500">
               生成分段分镜脚本 (景别·时长·叙事内容) 以及指导性的视觉流转设计
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {hasEpisodes && !isEditing && (
-              <div className="flex items-center h-12 gap-5 px-5 py-2 bg-violet-50 rounded-xl border border-violet-100 shadow-sm">
+              <div className="flex flex-wrap items-center min-h-12 gap-3 sm:gap-5 px-4 sm:px-5 py-2 bg-violet-50 rounded-xl border border-violet-100 shadow-sm">
                 <div className="flex items-center gap-2">
                   <Film className="w-3.5 h-3.5 text-violet-500" />
                   <span className="text-sm text-violet-700 font-bold whitespace-nowrap">总计 {stats.episodes} 集</span>

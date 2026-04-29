@@ -97,7 +97,7 @@ function LoglineSummaryBar({ logline }: { logline: LoglineData }) {
         <Lightbulb className="w-4 h-4 text-amber-500" />
         <span className="text-xs font-semibold text-amber-700">Logline 核心</span>
       </div>
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3">
         {items.map(({ icon: Icon, label, value, color }) => (
           <div key={label} className="min-w-0">
             <div className={`flex items-center gap-1 mb-1 ${color}`}>
@@ -193,11 +193,11 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex h-full min-w-0 flex-col">
+      <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
 
         {/* 标题栏 */}
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
           <h2 className="text-lg font-semibold text-gray-800">剧本生成</h2>
           {isEditing && (
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1 text-xs">
@@ -292,7 +292,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
                   <h3 className="text-sm font-semibold text-gray-700">选择一个 Logline 方案</h3>
                   <span className="text-xs text-gray-400">点击卡片以选择</span>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {(data.logline_options as LoglineData[]).map((opt, i) => (
                     <button
                       key={i}
@@ -347,7 +347,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
                   <Film className="w-4 h-4 text-purple-500" />
                   <h3 className="text-sm font-semibold text-gray-700">选择创作模式</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <button
                     onClick={() => onIntervene({ selected_mode: 'movie' })}
                     className="text-left p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-400 hover:shadow-lg transition-all group cursor-pointer"
@@ -566,7 +566,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
                     <h4 className="text-sm font-bold text-amber-800 flex items-center gap-2">
                       <Users className="w-4 h-4" /> 新增角色
                     </h4>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                       {data.new_characters.map((c: any, i: number) => (
                         <div key={i} className="bg-white p-3 rounded-lg border border-amber-100 shadow-sm flex flex-col gap-1">
                           <div className="font-bold text-amber-900 text-sm">{c.name} <span className="text-[10px] text-amber-600 font-normal bg-amber-100 px-1.5 py-0.5 rounded ml-1">{c.role || '配角'}</span></div>
@@ -582,7 +582,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
                     <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
                       <MapPin className="w-4 h-4" /> 新增场景
                     </h4>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                       {data.new_settings.map((s: any, i: number) => (
                         <div key={i} className="bg-white p-3 rounded-lg border border-emerald-100 shadow-sm flex flex-col gap-1">
                           <div className="font-bold text-emerald-900 text-sm">{s.name}</div>
@@ -634,7 +634,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
             {/* 基础信息 */}
             <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
               <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-violet-500" />基本信息</h4>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="text-gray-500 font-medium">标题</span>
                   <input type="text" value={editData.title || ''} onChange={e => updateField('title', e.target.value)}
@@ -779,7 +779,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
       {/* ===== 智能续写弹窗 ===== */}
       {showSmartContinueDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm shadow-2xl transition-opacity duration-200">
-          <div className="bg-white rounded-2xl w-[480px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl w-[min(480px,calc(100vw-2rem))] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2 border-b border-gray-100 pb-3">
               <Sparkles className="w-5 h-5 text-purple-500" />
               智能续写设置

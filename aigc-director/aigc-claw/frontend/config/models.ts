@@ -67,13 +67,6 @@ export const T2I_PROVIDERS: ProviderGroup[] = [
         ],
     },
     {
-        provider: 'jimeng',
-        label: 'JiMeng',
-        models: [
-            { id: 'jimeng_t2i_v40', label: 'jimeng_t2i_v40' },
-        ],
-    },
-    {
         provider: 'seedream',
         label: 'Seedream',
         models: [
@@ -104,13 +97,6 @@ export const I2I_PROVIDERS: ProviderGroup[] = [
         ],
     },
     {
-        provider: 'jimeng',
-        label: 'JiMeng',
-        models: [
-            { id: 'jimeng_t2i_v40', label: 'jimeng_t2i_v40' },
-        ],
-    },
-    {
         provider: 'seedream',
         label: 'Seedream',
         models: [
@@ -137,6 +123,8 @@ export const VIDEO_PROVIDERS: ProviderGroup[] = [
         label: 'DashScope',
         models: [
             { id: 'wan2.7-i2v', label: 'wan2.7-i2v', default: true },
+            { id: 'wan2.7-videoedit', label: 'wan2.7-videoedit' },
+            { id: 'wan2.7-r2v', label: 'wan2.7-r2v' },
             { id: 'wan2.6-i2v-flash', label: 'wan2.6-i2v-flash' },
             { id: 'happyhorse-1.0-i2v', label: 'happyhorse-1.0-i2v' },
         ],

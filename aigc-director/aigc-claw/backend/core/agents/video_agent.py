@@ -77,7 +77,7 @@ class VideoDirectorAgent(AgentInterface):
 
         save_path = self._next_version_path(sid, segment_id)
         try:
-            from tool.video_client import VideoClient
+            from models.video_client import VideoClient
             client = VideoClient()
             client.generate_video(
                 prompt=prompt,
@@ -257,7 +257,7 @@ class VideoDirectorAgent(AgentInterface):
 
         video_model = input_data.get("video_model", "") or settings.VIDEO_MODEL
         enable_concurrency = input_data.get("enable_concurrency", True)
-        from config_model import get_max_concurrency
+        from models.config_model import get_max_concurrency
         concurrency = get_max_concurrency(video_model, enable_concurrency)
         
         video_ratio = input_data.get("video_ratio", "16:9")

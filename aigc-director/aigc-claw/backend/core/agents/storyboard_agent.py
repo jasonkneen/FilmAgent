@@ -101,7 +101,7 @@ class StoryboardAgent(AgentInterface):
         return valid_episodes
 
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
-        from tool.llm_client import LLM
+        from models.llm_client import LLM
         input_data = self._merge_session_params(input_data)
         sid = input_data.get("session_id")
         if not sid: raise Exception("Missing session_id")

@@ -210,7 +210,7 @@ class CharacterDesignerAgent(AgentInterface):
     def _evaluate_with_vlm(self, image_path: str, description: str, asset_type: str, vlm_model: str = "qwen3.5-plus") -> dict:
         """使用 VLM 评估生成的图片"""
         try:
-            from tool.vlm_client import VLM
+            from models.vlm_client import VLM
             vlm = VLM()
 
             # 选择评估提示词
@@ -258,7 +258,7 @@ class CharacterDesignerAgent(AgentInterface):
     def _select_best_with_vlm(self, image_paths: List[str], name: str, description: str,
                                asset_type: str, species: str = "", vlm_model: str = "qwen3.5-plus") -> tuple:
         """使用 VLM 从多个版本中选择最好的一张"""
-        from tool.vlm_client import VLM
+        from models.vlm_client import VLM
         import re
 
         if not image_paths:
@@ -375,7 +375,7 @@ class CharacterDesignerAgent(AgentInterface):
 
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
         from config import settings
-        from tool.image_client import ImageClient
+        from models.image_client import ImageClient
 
         sid = input_data["session_id"]
         style = input_data.get("style", "anime")
@@ -384,7 +384,7 @@ class CharacterDesignerAgent(AgentInterface):
         # 根据 enable_concurrency 决定并发数
         enable_concurrency = input_data.get("enable_concurrency", True)
         logger.info(f"[CharacterAgent] enable_concurrency={enable_concurrency}")
-        from config_model import get_max_concurrency
+        from models.config_model import get_max_concurrency
         max_concurrency = get_max_concurrency(t2i_model, enable_concurrency)
         logger.info(f"[CharacterAgent] 使用并发数={max_concurrency}")
         concurrency = max_concurrency

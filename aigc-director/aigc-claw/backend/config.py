@@ -1,4 +1,5 @@
 import os
+import logging
 
 # 尝试加载 .env 文件 (需要: pip install python-dotenv)
 try:
@@ -6,6 +7,8 @@ try:
     load_dotenv()
 except ImportError:
     pass
+
+logger = logging.getLogger(__name__)
 
 class Config:
     # ==========================
@@ -32,6 +35,10 @@ class Config:
     
     # 会话数据目录
     SESSION_DIR = os.path.join(CODE_DIR, 'data', 'sessions')
+
+    # 一次性 pipeline 任务数据目录
+    TASK_DIR = os.path.join(CODE_DIR, 'data', 'tasks')
+    TASK_RESULT_DIR = os.path.join(RESULT_DIR, 'task')
 
     # ==========================
     # AI 模型 API 配置
@@ -87,10 +94,10 @@ class Config:
         """自动创建必要的目录"""
         # 确保 data 和 sessions 目录存在
         data_dir = os.path.join(cls.CODE_DIR, 'data')
-        for directory in [cls.CODE_DIR, data_dir, cls.SESSION_DIR, cls.RESULT_DIR, cls.TEMP_DIR]:
+        for directory in [cls.CODE_DIR, data_dir, cls.SESSION_DIR, cls.TASK_DIR, cls.RESULT_DIR, cls.TASK_RESULT_DIR, cls.TEMP_DIR]:
             if not os.path.exists(directory):
                 os.makedirs(directory, exist_ok=True)
-                print(f"Created directory: {directory}")
+                logger.info("Created directory: %s", directory)
 
 # 初始化目录结构
 Config.check_dirs()

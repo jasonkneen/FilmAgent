@@ -160,11 +160,11 @@ function SceneRow({
   const hasChanges = editDesc !== scene.description;
 
   return (
-    <div className={`flex border rounded-xl overflow-hidden bg-white ${
+    <div className={`flex flex-col xl:flex-row border rounded-xl overflow-hidden bg-white ${
       isFailed ? 'border-red-200' : 'border-gray-200'
     }`}>
       {/* 左侧: 提示词 */}
-      <div className="w-[360px] flex-shrink-0 p-4 border-r border-gray-100 flex flex-col">
+      <div className="w-full xl:w-[360px] xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
           <span className="flex items-center justify-center h-6 px-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex-shrink-0 whitespace-nowrap">
             {scene.index ?? scene.id.replace('Scene_', '')}
@@ -455,7 +455,7 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-800">参考图生成</h2>
@@ -550,4 +550,3 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
     </div>
   );
 }
-

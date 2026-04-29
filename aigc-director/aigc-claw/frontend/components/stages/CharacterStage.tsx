@@ -151,11 +151,11 @@ function AssetRow({
   const isFailed = asset.status === 'failed' && !isRegenerating;
 
   return (
-    <div className={`flex border rounded-xl overflow-hidden bg-white ${
+    <div className={`flex flex-col xl:flex-row border rounded-xl overflow-hidden bg-white ${
       isFailed ? 'border-red-200' : 'border-gray-200'
     }`}>
       {/* 左侧: 描述 */}
-      <div className="w-[320px] flex-shrink-0 p-4 border-r border-gray-100 flex flex-col">
+      <div className="w-full xl:w-80 xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
           {type === 'character'
             ? <Users className="w-3.5 h-3.5 text-violet-500" />
@@ -324,7 +324,7 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-800">角色 / 场景设计</h2>

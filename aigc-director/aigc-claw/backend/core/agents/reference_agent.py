@@ -325,7 +325,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                               character_description: str = "", setting_description: str = "",
                               vlm_model: str = "qwen3.5-plus") -> tuple:
         """使用 VLM 从多个版本中选择最好的一张"""
-        from tool.vlm_client import VLM
+        from models.vlm_client import VLM
 
         if not image_paths:
             return None, None
@@ -378,7 +378,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                           vlm_model: str = "qwen3.5-plus") -> dict:
         """使用 VLM 评估首帧参考图"""
         try:
-            from tool.vlm_client import VLM
+            from models.vlm_client import VLM
             vlm = VLM()
 
             eval_prompt = load_prompt('reference', 'eval_first_frame', 'zh').format(
@@ -467,8 +467,8 @@ class ReferenceGeneratorAgent(AgentInterface):
 
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
         from config import settings
-        from tool.image_client import ImageClient
-        from tool.llm_client import LLM
+        from models.image_client import ImageClient
+        from models.llm_client import LLM
 
         # 从 session.json 补齐缺失的参数（关键修复：防止前端漏传导致的默认值回退）
         input_data = self._merge_session_params(input_data)
@@ -486,7 +486,7 @@ class ReferenceGeneratorAgent(AgentInterface):
         enable_concurrency = input_data.get("enable_concurrency", True)
         logger.info(f"[ReferenceAgent] enable_concurrency={enable_concurrency}")
         # 取 t2i 和 it2i 中的最大并发数
-        from config_model import get_max_concurrency
+        from models.config_model import get_max_concurrency
         max_t2i = get_max_concurrency(t2i, enable_concurrency)
         max_it2i = get_max_concurrency(it2i, enable_concurrency)
         concurrency = max(max_t2i, max_it2i)

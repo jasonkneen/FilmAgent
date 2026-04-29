@@ -1,0 +1,841 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  CheckCircle,
+  Clock,
+  Image as ImageIcon,
+  Loader2,
+  Play,
+  RefreshCw,
+  Settings2,
+  SlidersHorizontal,
+  Upload,
+  Video,
+  Volume2,
+  X,
+  XCircle,
+} from 'lucide-react';
+import clsx from 'clsx';
+import {
+  fetchApiModels,
+  deletePipelineTask,
+  fetchPipelineTask,
+  fetchPipelineTasks,
+  startActionTransferPipeline,
+  startDigitalHumanPipeline,
+  startStandardPipeline,
+  subscribePipelineTask,
+  uploadPipelineMedia,
+  type PipelineTask,
+  type PipelineTaskEvent,
+  type ApiModelOption,
+} from '@/lib/workflowApi';
+import {
+  I2I_PROVIDERS,
+  LLM_PROVIDERS,
+  T2I_PROVIDERS,
+  VIDEO_PROVIDERS,
+  VIDEO_RATIOS,
+  type ProviderGroup,
+} from '@/config/models';
+
+type PipelineId = 'standard' | 'action_transfer' | 'digital_human';
+
+interface PipelinePageProps {
+  pipeline: PipelineId;
+  title: string;
+  subtitle: string;
+}
+
+const DEFAULTS = {
+  llm: LLM_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || LLM_PROVIDERS[0].models[0].id,
+  image: T2I_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || T2I_PROVIDERS[0].models[0].id,
+  editImage: I2I_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || I2I_PROVIDERS[0].models[0].id,
+  video: VIDEO_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || VIDEO_PROVIDERS[0].models[0].id,
+};
+
+const DEFAULT_STANDARD_STYLE_CONTROL =
+  'Minimalist black-and-white matchstick figure style illustration, clean lines, simple sketch style';
+
+const STATUS_STYLE: Record<string, string> = {
+  pending: 'bg-gray-100 text-gray-500',
+  running: 'bg-blue-50 text-blue-600',
+  completed: 'bg-green-50 text-green-600',
+  failed: 'bg-red-50 text-red-600',
+};
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  groups,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  groups: ProviderGroup[];
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 min-w-0">
+      <span className="text-xs font-medium text-gray-500">{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-300"
+      >
+        {groups.map(group => (
+          <optgroup key={group.provider} label={group.label}>
+            {group.models.map(model => (
+              <option key={model.id} value={model.id}>{model.label}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function groupApiModels(models: ApiModelOption[], fallback: ProviderGroup[]): ProviderGroup[] {
+  if (!models.length) return fallback;
+  const providerLabels: Record<string, string> = {
+    dashscope: 'DashScope',
+    openai: 'OpenAI',
+    seedream: 'Seedream',
+    seedance: 'Seedance',
+    kling: 'Kling',
+  };
+  const groups = new Map<string, ProviderGroup>();
+  for (const model of models) {
+    if (!groups.has(model.provider)) {
+      groups.set(model.provider, {
+        provider: model.provider,
+        label: providerLabels[model.provider] || model.provider,
+        models: [],
+      });
+    }
+    groups.get(model.provider)!.models.push({
+      id: model.id,
+      label: model.label || model.id,
+      default: model.api_contract_verified,
+    });
+  }
+  return Array.from(groups.values());
+}
+
+function firstModelId(groups: ProviderGroup[], preferred?: string) {
+  const models = groups.flatMap(group => group.models);
+  if (preferred && models.some(model => model.id === preferred)) return preferred;
+  return models.find(model => model.default)?.id || models[0]?.id || '';
+}
+
+function TextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 min-w-0">
+      <span className="text-xs font-medium text-gray-500">{label}{required ? ' *' : ''}</span>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-300"
+      />
+    </label>
+  );
+}
+
+function MediaUploadField({
+  label,
+  value,
+  onChange,
+  accept,
+  placeholder,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  accept: string;
+  placeholder: string;
+  required?: boolean;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [filename, setFilename] = useState('');
+  const [error, setError] = useState('');
+
+  const handleUpload = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const result = await uploadPipelineMedia(file);
+      setFilename(result.filename);
+      onChange(result.file_path);
+    } catch (e: any) {
+      setError(e.message || '上传失败');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <label className="flex flex-col gap-1.5 min-w-0">
+      <span className="text-xs font-medium text-gray-500">{label}{required ? ' *' : ''}</span>
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={e => {
+            setFilename('');
+            onChange(e.target.value);
+          }}
+          placeholder={placeholder}
+          className="h-10 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-300"
+        />
+        <div className="relative flex-shrink-0">
+          <input
+            type="file"
+            accept={accept}
+            onChange={e => handleUpload(e.target.files?.[0])}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            disabled={uploading}
+          />
+          <button
+            type="button"
+            className={clsx(
+              'h-10 w-10 rounded-lg border flex items-center justify-center transition-colors',
+              uploading
+                ? 'border-gray-100 bg-gray-50 text-gray-300'
+                : 'border-gray-200 bg-white text-gray-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
+            )}
+            title="上传媒体"
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          </button>
+        </div>
+        {value && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilename('');
+              onChange('');
+            }}
+            className="h-10 w-10 rounded-lg border border-gray-200 bg-white text-gray-400 hover:bg-gray-50 hover:text-red-500 flex items-center justify-center flex-shrink-0"
+            title="清除"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {(filename || error) && (
+        <span className={clsx('text-[10px] truncate', error ? 'text-red-500' : 'text-gray-400')}>
+          {error || filename}
+        </span>
+      )}
+    </label>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 min-w-0">
+      <span className="text-xs font-medium text-gray-500">{label}</span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-300"
+      />
+    </label>
+  );
+}
+
+function assetHref(path?: string) {
+  if (!path) return '';
+  if (/^(https?:|data:|file:)/.test(path)) return path;
+  const marker = '/code/';
+  const idx = path.indexOf(marker);
+  if (idx >= 0) return `/code/${path.slice(idx + marker.length)}`;
+  return path;
+}
+
+function statusText(status?: string) {
+  if (status === 'pending') return '等待中';
+  if (status === 'running') return '生成中';
+  if (status === 'completed') return '已完成';
+  if (status === 'failed') return '失败';
+  return status || '未知';
+}
+
+function taskTitle(task: PipelineTask) {
+  const input = task.input || {};
+  return input.title || input.goods_title || input.text || input.prompt_text || input.goods_text || task.task_id;
+}
+
+function TaskResult({ task }: { task: PipelineTask | null }) {
+  const progress = Math.max(0, Math.min(100, task?.progress || 0));
+
+  if (!task) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm h-full">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <SlidersHorizontal className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700">任务状态</h2>
+          </div>
+          <span className="text-xs font-medium text-gray-400">0%</span>
+        </div>
+        <div className="mb-4 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+          <div className="h-full w-0 rounded-full bg-blue-500" />
+        </div>
+        <div className="h-48 rounded-xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-sm text-gray-400">
+          等待启动
+        </div>
+      </div>
+    );
+  }
+
+  const artifacts = task.artifacts || [];
+  const mediaArtifacts = artifacts
+    .map((item, index) => ({ ...item, orderIndex: index }))
+    .filter(item => ['audio', 'image', 'video'].includes(item.kind))
+    .sort((a, b) => {
+      const aTime = a.created_at ? Date.parse(a.created_at) : Number.NaN;
+      const bTime = b.created_at ? Date.parse(b.created_at) : Number.NaN;
+      if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) return aTime - bTime;
+      if (!Number.isNaN(aTime) && Number.isNaN(bTime)) return -1;
+      if (Number.isNaN(aTime) && !Number.isNaN(bTime)) return 1;
+      return a.orderIndex - b.orderIndex;
+    });
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm h-full">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {task.status === 'running' ? (
+            <Loader2 className="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" />
+          ) : task.status === 'completed' ? (
+            <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+          ) : task.status === 'failed' ? (
+            <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          ) : (
+            <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          )}
+          <h2 className="text-sm font-semibold text-gray-700">任务状态</h2>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={clsx('px-2 py-1 rounded-full text-xs font-medium', STATUS_STYLE[task.status] || STATUS_STYLE.pending)}>
+            {statusText(task.status)}
+          </span>
+          <span className="text-xs font-semibold text-gray-500">{progress}%</span>
+        </div>
+      </div>
+
+      <div className="mb-4 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className={clsx('h-full rounded-full transition-all', task.status === 'failed' ? 'bg-red-500' : 'bg-blue-500')}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {mediaArtifacts.length > 0 ? (
+        <div className="max-h-[28rem] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {mediaArtifacts.map((item, index) => (
+              <div
+                key={`${item.kind}-${item.name || index}-${item.path}`}
+                className="h-44 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden min-w-0"
+              >
+                <div className="h-8 px-3 border-b border-gray-200 bg-white flex items-center gap-2">
+                  {item.kind === 'video' && <Video className="w-3.5 h-3.5 text-blue-500" />}
+                  {item.kind === 'image' && <ImageIcon className="w-3.5 h-3.5 text-emerald-500" />}
+                  {item.kind === 'audio' && <Volume2 className="w-3.5 h-3.5 text-amber-500" />}
+                  <span className="text-xs font-medium text-gray-500 truncate">{item.name || item.kind}</span>
+                </div>
+                {item.kind === 'video' && (
+                  <video src={assetHref(item.path)} controls className="w-full h-36 bg-black object-contain" />
+                )}
+                {item.kind === 'image' && (
+                  <img src={assetHref(item.path)} alt={item.name || 'image'} className="w-full h-36 object-contain" />
+                )}
+                {item.kind === 'audio' && (
+                  <div className="h-36 px-3 flex items-center">
+                    <audio src={assetHref(item.path)} controls className="w-full" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="h-48 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-400">
+          结果生成后显示
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PipelineHistory({
+  pipeline,
+  activeTaskId,
+  onSelect,
+  onDeleted,
+}: {
+  pipeline: PipelineId;
+  activeTaskId?: string;
+  onSelect: (task: PipelineTask) => void;
+  onDeleted?: (taskId: string) => void;
+}) {
+  const [tasks, setTasks] = useState<PipelineTask[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [manageMode, setManageMode] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const records = await fetchPipelineTasks(100);
+      setTasks(records.filter(task => task.pipeline === pipeline));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [pipeline]);
+
+  if (!tasks.length) return null;
+
+  const remove = async (taskId: string) => {
+    setDeleting(taskId);
+    try {
+      await deletePipelineTask(taskId);
+      setTasks(prev => prev.filter(task => task.task_id !== taskId));
+      onDeleted?.(taskId);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  return (
+    <section className="w-full max-w-6xl px-6 pb-12">
+      <div className="flex items-center gap-2 mb-4">
+        <Clock className="w-4 h-4 text-gray-400" />
+        <h3 className="text-sm font-medium text-gray-600">历史记录</h3>
+        <button
+          onClick={() => setManageMode(value => !value)}
+          className={clsx(
+            'ml-auto px-2.5 h-8 rounded-lg text-xs font-medium transition-colors',
+            manageMode ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          )}
+        >
+          {manageMode ? '完成' : '管理'}
+        </button>
+        <button
+          onClick={() => load().catch(() => {})}
+          className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center"
+          title="刷新历史"
+        >
+          <RefreshCw className={clsx('w-3.5 h-3.5', loading && 'animate-spin')} />
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {tasks.map(task => (
+          <div
+            key={task.task_id}
+            onClick={() => !manageMode && onSelect(task)}
+            className={clsx(
+              'group text-left p-4 bg-white rounded-xl border hover:border-blue-300 hover:shadow-sm transition-all',
+              manageMode ? 'cursor-default' : 'cursor-pointer',
+              activeTaskId === task.task_id ? 'border-blue-300 ring-2 ring-blue-50' : 'border-gray-200'
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors truncate">
+                  {String(taskTitle(task)).slice(0, 48)}
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span className={clsx('text-[10px] px-1.5 py-0.5 rounded', STATUS_STYLE[task.status] || STATUS_STYLE.pending)}>
+                    {statusText(task.status)}
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {task.created_at ? new Date(task.created_at).toLocaleString('zh-CN') : task.task_id}
+                  </span>
+                </div>
+                <div className="mt-2 h-1 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${task.progress || 0}%` }} />
+                </div>
+              </div>
+              {manageMode ? (
+                <button
+                  onClick={event => {
+                    event.stopPropagation();
+                    remove(task.task_id).catch(() => {});
+                  }}
+                  disabled={deleting === task.task_id}
+                  className="w-8 h-8 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 flex items-center justify-center flex-shrink-0"
+                  title="删除任务"
+                >
+                  {deleting === task.task_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                </button>
+              ) : (
+                <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 flex-shrink-0 mt-0.5" />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function PipelinePage({ pipeline, title, subtitle }: PipelinePageProps) {
+  const [showSettings, setShowSettings] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState('');
+  const [task, setTask] = useState<PipelineTask | null>(null);
+  const [imageModelGroups, setImageModelGroups] = useState<ProviderGroup[]>(pipeline === 'digital_human' ? I2I_PROVIDERS : T2I_PROVIDERS);
+  const [videoModelGroups, setVideoModelGroups] = useState<ProviderGroup[]>(VIDEO_PROVIDERS);
+
+  const [text, setText] = useState('');
+  const [standardMode, setStandardMode] = useState<'inspiration' | 'copy'>('inspiration');
+  const [titleValue, setTitleValue] = useState('');
+  const [enableSubtitles, setEnableSubtitles] = useState(false);
+  const [promptText, setPromptText] = useState('');
+  const [imagePath, setImagePath] = useState('');
+  const [videoPath, setVideoPath] = useState('');
+  const [characterImage, setCharacterImage] = useState('');
+  const [goodsImage, setGoodsImage] = useState('');
+  const [goodsTitle, setGoodsTitle] = useState('');
+  const [goodsText, setGoodsText] = useState('');
+
+  const [llmModel, setLlmModel] = useState(DEFAULTS.llm);
+  const [imageModel, setImageModel] = useState(DEFAULTS.image);
+  const [videoModel, setVideoModel] = useState(
+    pipeline === 'action_transfer' ? 'wan2.7-videoedit' : pipeline === 'digital_human' ? 'wan2.7-r2v' : DEFAULTS.video
+  );
+  const [ratio, setRatio] = useState('9:16');
+  const [duration, setDuration] = useState(5);
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-YunjianNeural');
+  const [ttsSpeed, setTtsSpeed] = useState(1.2);
+  const [negativePrompt, setNegativePrompt] = useState(pipeline === 'standard' ? DEFAULT_STANDARD_STYLE_CONTROL : '');
+
+  useEffect(() => {
+    const imageAbility = pipeline === 'digital_human' ? 'reference_image' : 'text_to_image';
+    const videoAbility = pipeline === 'action_transfer' ? 'action_transfer' : 'digital_human';
+
+    if (pipeline === 'standard') {
+      setNegativePrompt(current => current || DEFAULT_STANDARD_STYLE_CONTROL);
+    }
+
+    fetchApiModels({ mediaType: 'image', ability: imageAbility, verifiedOnly: true })
+      .then(models => {
+        const groups = groupApiModels(models, pipeline === 'digital_human' ? I2I_PROVIDERS : T2I_PROVIDERS);
+        setImageModelGroups(groups);
+        setImageModel(current => firstModelId(groups, current || DEFAULTS.image));
+      })
+      .catch(() => {});
+
+    if (pipeline !== 'standard') {
+      fetchApiModels({ mediaType: 'video', ability: videoAbility, verifiedOnly: true })
+        .then(models => {
+          const groups = groupApiModels(models, VIDEO_PROVIDERS);
+          setVideoModelGroups(groups);
+          const preferred = pipeline === 'action_transfer' ? 'wan2.7-videoedit' : 'wan2.7-r2v';
+          setVideoModel(current => firstModelId(groups, current || preferred));
+        })
+        .catch(() => {});
+    }
+  }, [pipeline]);
+
+  const canSubmit = useMemo(() => {
+    if (pipeline === 'standard') return text.trim().length > 0;
+    if (pipeline === 'action_transfer') return promptText.trim() && imagePath.trim() && videoPath.trim();
+    return characterImage.trim() && goodsText.trim();
+  }, [pipeline, text, promptText, imagePath, videoPath, characterImage, goodsText]);
+
+  useEffect(() => {
+    if (!task || !['pending', 'running'].includes(task.status)) return;
+
+    const refreshTask = async () => {
+      const fresh = await fetchPipelineTask(task.task_id);
+      setTask(fresh);
+      if (!['pending', 'running'].includes(fresh.status)) {
+        setRunning(false);
+      }
+    };
+
+    const handleEvent = (event: PipelineTaskEvent) => {
+      if (event.type === 'snapshot' || event.type === 'progress') {
+        setTask(prev => prev && prev.task_id === event.task_id
+          ? {
+              ...prev,
+              status: event.status || prev.status,
+              progress: event.progress ?? prev.progress,
+            }
+          : prev
+        );
+        return;
+      }
+
+      if (event.type === 'artifact' || event.type === 'completed' || event.type === 'failed') {
+        refreshTask().catch(() => setRunning(false));
+      }
+    };
+
+    return subscribePipelineTask(
+      task.task_id,
+      handleEvent,
+      () => {
+        if (task.status === 'pending' || task.status === 'running') {
+          setRunning(false);
+        }
+      },
+    );
+  }, [task?.task_id, task?.status]);
+
+  const submit = async () => {
+    if (!canSubmit || running) return;
+    setRunning(true);
+    setError('');
+    try {
+      const common = {
+        video_model: videoModel,
+        video_ratio: ratio,
+        duration,
+        negative_prompt: negativePrompt || undefined,
+      };
+      const started = pipeline === 'standard'
+        ? await startStandardPipeline({
+            text,
+            mode: standardMode,
+            title: titleValue || undefined,
+            llm_model: llmModel,
+            image_model: imageModel,
+            video_ratio: ratio,
+            enable_subtitles: enableSubtitles,
+            tts_voice: ttsVoice,
+            tts_speed: ttsSpeed,
+            style_control: negativePrompt || undefined,
+          })
+        : pipeline === 'action_transfer'
+          ? await startActionTransferPipeline({
+              prompt_text: promptText,
+              image_path: imagePath,
+              video_path: videoPath,
+              ...common,
+            })
+          : await startDigitalHumanPipeline({
+              mode: 'customize',
+              character_image_path: characterImage,
+              goods_image_path: goodsImage || undefined,
+              goods_title: goodsTitle || undefined,
+              goods_text: goodsText || undefined,
+              llm_model: llmModel,
+              image_model: imageModel,
+              video_model: videoModel,
+              video_ratio: ratio,
+              tts_voice: ttsVoice,
+              tts_speed: ttsSpeed,
+              negative_prompt: negativePrompt || undefined,
+            });
+      const fresh = await fetchPipelineTask(started.task_id);
+      setTask(fresh);
+    } catch (e: any) {
+      setError(e.message || '启动失败');
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50/50 overflow-y-auto">
+      <div className="w-full max-w-6xl mx-auto px-6 pt-16 pb-8">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 mb-3">
+            <Play className="w-7 h-7 text-blue-500" />
+            <h1 className="text-2xl font-bold text-gray-800">{title}</h1>
+          </div>
+          <p className="text-sm text-gray-500">{subtitle}</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] gap-5 items-start">
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+            {pipeline === 'standard' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 h-10 rounded-lg bg-gray-100 p-1 text-sm max-w-sm">
+                  {[
+                    { id: 'inspiration', label: '创作灵感' },
+                    { id: 'copy', label: '完整文案' },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setStandardMode(item.id as 'inspiration' | 'copy')}
+                      className={clsx('rounded-md transition-colors', standardMode === item.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500')}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder={standardMode === 'inspiration' ? '输入主题、观点或故事灵感，系统会先构思成完整旁白...' : '输入完整旁白文案，系统会按句号切分片段并直接进入 TTS...'}
+                  className="w-full min-h-[150px] resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 outline-none focus:border-blue-300"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <TextInput label="标题" value={titleValue} onChange={setTitleValue} placeholder="可选，留空时由llm生成" />
+                </div>
+              </div>
+            )}
+
+            {pipeline === 'action_transfer' && (
+              <div className="space-y-4">
+                <textarea
+                  value={promptText}
+                  onChange={e => setPromptText(e.target.value)}
+                  placeholder="描述希望迁移到人物或角色上的动作效果..."
+                  className="w-full min-h-[130px] resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 outline-none focus:border-blue-300"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <MediaUploadField label="参考图片" value={imagePath} onChange={setImagePath} accept="image/*" placeholder="/path/to/image.png" required />
+                  <MediaUploadField label="动作视频" value={videoPath} onChange={setVideoPath} accept="video/*" placeholder="/path/to/video.mp4" required />
+                </div>
+              </div>
+            )}
+
+            {pipeline === 'digital_human' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <MediaUploadField label="人物图片" value={characterImage} onChange={setCharacterImage} accept="image/*" placeholder="/path/to/person.png" required />
+                  <MediaUploadField label="商品图片" value={goodsImage} onChange={setGoodsImage} accept="image/*" placeholder="/path/to/product.png" />
+                </div>
+                <TextInput label="商品标题" value={goodsTitle} onChange={setGoodsTitle} placeholder="可选，留空时由llm生成" />
+                <textarea
+                  value={goodsText}
+                  onChange={e => setGoodsText(e.target.value)}
+                  placeholder="输入口播文案..."
+                  className="w-full min-h-[130px] resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 outline-none focus:border-blue-300"
+                />
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
+                  showSettings ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                )}
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                生成配置
+              </button>
+              {pipeline === 'standard' && (
+                <label className="flex items-center gap-2 h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={enableSubtitles}
+                    onChange={e => setEnableSubtitles(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  添加标题和字幕
+                </label>
+              )}
+              {error && <span className="text-xs text-red-500 truncate">{error}</span>}
+              <button
+                onClick={submit}
+                disabled={!canSubmit || running}
+                className={clsx(
+                  'ml-auto flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium transition-colors',
+                  canSubmit && !running ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                )}
+              >
+                {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                启动任务
+              </button>
+            </div>
+
+            {showSettings && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-xl space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(pipeline === 'digital_human' || pipeline === 'standard') && (
+                    <SelectField label="LLM 模型" value={llmModel} onChange={setLlmModel} groups={LLM_PROVIDERS} />
+                  )}
+                  {pipeline !== 'action_transfer' && (
+                    <SelectField label="图片模型" value={imageModel} onChange={setImageModel} groups={imageModelGroups} />
+                  )}
+                  {pipeline !== 'standard' && (
+                    <SelectField label="视频模型" value={videoModel} onChange={setVideoModel} groups={videoModelGroups} />
+                  )}
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-gray-500">视频比例</span>
+                    <select value={ratio} onChange={e => setRatio(e.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none">
+                      {VIDEO_RATIOS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  {pipeline === 'action_transfer' && (
+                    <NumberField label="视频时长" value={duration} onChange={setDuration} min={1} max={10} />
+                  )}
+                  {pipeline !== 'action_transfer' && (
+                    <>
+                      <TextInput label="TTS 声音" value={ttsVoice} onChange={setTtsVoice} />
+                      <NumberField label="TTS 速度" value={ttsSpeed} onChange={setTtsSpeed} min={0.5} max={2} />
+                    </>
+                  )}
+                </div>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-gray-500">{pipeline === 'standard' ? '风格控制' : '负向提示词'}</span>
+                  <textarea
+                    value={negativePrompt}
+                    onChange={e => setNegativePrompt(e.target.value)}
+                    placeholder={pipeline === 'standard' ? '会作为所有图像提示词的前缀...' : '负向提示词...'}
+                    className="w-full min-h-[70px] resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-300"
+                  />
+                </label>
+              </div>
+            )}
+          </section>
+
+          <TaskResult task={task} />
+        </div>
+      </div>
+
+      <PipelineHistory
+        pipeline={pipeline}
+        activeTaskId={task?.task_id}
+        onSelect={selected => setTask(selected)}
+        onDeleted={taskId => {
+          if (task?.task_id === taskId) setTask(null);
+        }}
+      />
+    </div>
+  );
+}

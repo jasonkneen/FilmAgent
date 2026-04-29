@@ -81,7 +81,7 @@ export default function StageActions({
   if (!showRegen && !showActions && !showSaveSelections) return null;
 
   return (
-    <div className="border-t border-gray-200 bg-white px-6 py-4 flex items-center justify-between gap-3 flex-shrink-0">
+    <div className="border-t border-gray-200 bg-white px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
       {/* 左侧：重新生成/继续生成按钮 */}
       <div>
         {showRegen && (
@@ -98,7 +98,7 @@ export default function StageActions({
       </div>
 
       {/* 右侧：操作按钮组 */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {showActions && onEdit && (
           <button
             onClick={onEdit}

@@ -124,7 +124,7 @@ class ScriptWriterAgent(AgentInterface):
             sequel_idea = intervention.get("sequel_idea", "").strip()
 
             from config import settings as app_settings
-            from tool.llm_client import LLM
+            from models.llm_client import LLM
             llm = LLM()
 
             def _log_progress(pct, msg):
@@ -250,7 +250,7 @@ class ScriptWriterAgent(AgentInterface):
             is_zh = any('\u4e00' <= c <= '\u9fff' for c in idea)
 
             from config import settings as app_settings
-            from tool.llm_client import LLM
+            from models.llm_client import LLM
             os.makedirs(app_settings.TEMP_DIR, exist_ok=True)
             llm = LLM()
 

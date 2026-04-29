@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, DragEvent } from 'react';
-import { Sparkles, Image, Video, MessageSquare, Zap, Loader2, ArrowLeft, Copy, Check, Trash2, Settings2, X, FolderOpen, Upload, FileImage, Globe } from 'lucide-react';
-import Link from 'next/link';
+import { Sparkles, Image, Video, MessageSquare, Zap, Loader2, Copy, Check, Trash2, X, FolderOpen, Upload, Globe } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { LLM_MODELS, T2I_MODELS, I2I_MODELS, VIDEO_MODELS, VLM_MODELS } from '@/config/models';
 
@@ -55,6 +54,39 @@ interface HistoryRecord {
     video_path?: string;
   };
   created_at: string;
+}
+
+function SandboxOutput({ output }: { output?: HistoryRecord['output'] | null }) {
+  if (!output) return null;
+  return (
+    <div className="space-y-4">
+      {output.response && (
+        <pre className="text-sm text-gray-700 whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
+          {output.response}
+        </pre>
+      )}
+      {output.images && output.images.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {output.images.map((img, i) => (
+            <a key={i} href={toMediaUrl(img)} target="_blank" rel="noopener noreferrer" className="group block rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <img src={toMediaUrl(img)} alt={`output-${i}`} className="w-full h-56 object-contain bg-gray-50" />
+              <div className="px-3 py-2 text-xs text-gray-500 group-hover:text-indigo-600 border-t border-gray-100">查看图片</div>
+            </a>
+          ))}
+        </div>
+      )}
+      {output.video_path && (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <video src={toMediaUrl(output.video_path)} controls className="w-full max-h-[28rem] bg-black object-contain" />
+          <div className="px-3 py-2 border-t border-gray-100">
+            <a href={toMediaUrl(output.video_path)} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline">
+              查看视频
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // 图片上传组件
@@ -234,12 +266,12 @@ export default function SandboxPage() {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [currentOutput, setCurrentOutput] = useState<HistoryRecord['output'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // 历史记录状态
   const [history, setHistory] = useState<HistoryRecord[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [manageMode, setManageMode] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
@@ -260,7 +292,7 @@ export default function SandboxPage() {
 
   useEffect(() => {
     fetchHistory();
-  }, [showHistory]);
+  }, []);
 
   // 检查 URL 参数，自动加载历史记录
   useEffect(() => {
@@ -277,10 +309,11 @@ export default function SandboxPage() {
         if (record.output?.response) {
           setResult(record.output.response);
         } else if (record.output?.images?.length) {
-          setResult(`生成完成，共 ${record.output.images.length} 张图片`);
+          setResult(null);
         } else if (record.output?.video_path) {
-          setResult('视频生成完成');
+          setResult(null);
         }
+        setCurrentOutput(record.output || null);
       }
     }
   }, [searchParams, history]);
@@ -293,6 +326,11 @@ export default function SandboxPage() {
       const data = await resp.json();
       if (data.success) {
         setHistory(history.filter(r => r.id !== id));
+        if (selectedRecord?.id === id) {
+          setSelectedRecord(null);
+          setResult(null);
+          setCurrentOutput(null);
+        }
       }
     } catch (e) {
       console.error('Failed to delete:', e);
@@ -332,6 +370,7 @@ export default function SandboxPage() {
     })();
     setSelectedModel(models.find(m => m.default)?.id || models[0]?.id || '');
     setResult(null);
+    setCurrentOutput(null);
     setError(null);
     setImageUrl('');
   };
@@ -367,6 +406,7 @@ export default function SandboxPage() {
 
     setLoading(true);
     setResult(null);
+    setCurrentOutput(null);
     setError(null);
 
     try {
@@ -411,8 +451,14 @@ export default function SandboxPage() {
 
       if (data.success) {
         if (activeTool === 't2i' || activeTool === 'i2i' || activeTool === 'video') {
-          setResult(JSON.stringify(data.result || data.video_path, null, 2));
+          const output = activeTool === 'video'
+            ? { video_path: data.video_path }
+            : { images: Array.isArray(data.result) ? data.result : [] };
+          setCurrentOutput(output);
+          setResult(null);
         } else {
+          const output = { response: data.result };
+          setCurrentOutput(output);
           setResult(data.result);
         }
         fetchHistory();
@@ -427,8 +473,9 @@ export default function SandboxPage() {
   };
 
   const copyResult = () => {
-    if (result) {
-      navigator.clipboard.writeText(result);
+    const copyText = result || JSON.stringify(currentOutput, null, 2);
+    if (copyText) {
+      navigator.clipboard.writeText(copyText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -467,155 +514,16 @@ export default function SandboxPage() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
             <div>
               <h1 className="text-xl font-bold text-gray-800">临时工作台</h1>
               <p className="text-sm text-gray-500">独立调用各种 AI 工具</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { setShowHistory(!showHistory); setManageMode(false); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                showHistory ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              <span>历史记录</span>
-            </button>
-            {showHistory && (
-              <button
-                onClick={() => setManageMode(!manageMode)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  manageMode ? 'bg-red-100 text-red-700' : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                <Settings2 className="w-3.5 h-3.5" />
-                <span>{manageMode ? '取消管理' : '管理'}</span>
-              </button>
-            )}
-          </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        {showHistory ? (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">历史记录</h2>
-              <span className="text-sm text-gray-500">{history.length} 条记录</span>
-            </div>
-
-            {history.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>暂无历史记录</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {history.map(record => (
-                  <div
-                    key={record.id}
-                    className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer hover:border-indigo-300 transition-colors"
-                    onClick={() => {
-                      setSelectedRecord(record);
-                      setActiveTool(record.tool as ToolType);
-                      setPrompt(record.input.prompt || '');
-                      setImageUrl(record.input.reference_image || record.input.images?.[0] || '');
-                      if (record.output?.response) {
-                        setResult(record.output.response);
-                      } else if (record.output?.images?.length) {
-                        setResult(`生成完成，共 ${record.output.images.length} 张图片`);
-                      } else if (record.output?.video_path) {
-                        setResult('视频生成完成');
-                      }
-                      setShowHistory(false);
-                    }}
-                  >
-                    <div className="p-4 bg-gray-50 border-b border-gray-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            record.tool === 'llm' ? 'bg-blue-100 text-blue-700' :
-                            record.tool === 'vlm' ? 'bg-green-100 text-green-700' :
-                            record.tool === 't2i' ? 'bg-purple-100 text-purple-700' :
-                            record.tool === 'i2i' ? 'bg-orange-100 text-orange-700' :
-                            'bg-pink-100 text-pink-700'
-                          }`}>
-                            {getToolName(record.tool)}
-                          </span>
-                          <span className="text-xs text-gray-400">{record.model}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">{formatDate(record.created_at)}</span>
-                          {manageMode && (
-                            <button
-                              onClick={() => deleteRecord(record.id)}
-                              disabled={deleting === record.id}
-                              className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-                            >
-                              {deleting === record.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-700 line-clamp-2">
-                        {record.input.prompt || record.input.reference_image || '(无提示词)'}
-                      </p>
-                      {record.input.images && record.input.images.length > 0 && (
-                        <div className="mt-2 flex gap-2 overflow-x-auto">
-                          {record.input.images.map((img, i) => (
-                            <img key={i} src={toMediaUrl(img)} alt="input" className="h-16 w-auto rounded border border-gray-200" />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {record.output && (
-                      <div className="p-4">
-                        {record.output.response && (
-                          <pre className="text-sm text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                            {record.output.response}
-                          </pre>
-                        )}
-                        {record.output.images && record.output.images.length > 0 && (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {record.output.images.map((img, i) => (
-                              <div key={i} className="relative group">
-                                <img src={toMediaUrl(img)} alt={`output-${i}`} className="w-full h-auto rounded-lg border border-gray-200" />
-                                <a href={toMediaUrl(img)} target="_blank" rel="noopener noreferrer" className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                                  <span className="text-white text-xs">查看大图</span>
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {record.output.video_path && (
-                          <div>
-                            <video src={toMediaUrl(record.output.video_path)} controls className="w-full max-w-md rounded-lg border border-gray-200" />
-                            <a href={toMediaUrl(record.output.video_path)} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline mt-2 inline-block">
-                              查看视频
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
+        <>
             {/* 工具选择 */}
             <div className="grid grid-cols-5 gap-3 mb-8">
               {tools.map(tool => (
@@ -722,13 +630,13 @@ export default function SandboxPage() {
             </div>
 
             {/* 结果展示 */}
-            {(result || error) && (
+            {(currentOutput || error) && (
               <div className={`rounded-2xl border p-6 ${error ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className={`font-medium ${error ? 'text-red-700' : 'text-green-700'}`}>
                     {error ? '错误' : '结果'}
                   </h3>
-                  {!error && result && (
+                  {!error && currentOutput && (
                     <button onClick={copyResult} className="p-2 rounded-lg hover:bg-white/50 transition-colors" title="复制结果">
                       {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-gray-500" />}
                     </button>
@@ -737,14 +645,72 @@ export default function SandboxPage() {
                 {error ? (
                   <p className="text-red-600 text-sm">{error}</p>
                 ) : (
-                  <pre className="text-sm text-gray-700 whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
-                    {result}
-                  </pre>
+                  <SandboxOutput output={currentOutput} />
                 )}
               </div>
             )}
-          </>
-        )}
+          <section className="mt-10">
+            <div className="flex items-center gap-2 mb-4">
+              <FolderOpen className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-medium text-gray-600">{getToolName(activeTool)}历史记录</h2>
+              <button
+                onClick={() => setManageMode(value => !value)}
+                className={`ml-auto text-xs px-2.5 h-8 rounded-lg transition-colors ${
+                  manageMode ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {manageMode ? '完成' : '管理'}
+              </button>
+            </div>
+            {history.filter(record => record.tool === activeTool).length === 0 ? (
+              <div className="h-32 rounded-xl border border-dashed border-gray-200 bg-white/70 flex items-center justify-center text-sm text-gray-400">
+                暂无历史记录
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {history.filter(record => record.tool === activeTool).map(record => (
+                  <div
+                    key={record.id}
+                    onClick={() => {
+                      if (manageMode) return;
+                      setSelectedRecord(record);
+                      setPrompt(record.input.prompt || '');
+                      setImageUrl(record.input.reference_image || record.input.images?.[0] || '');
+                      setCurrentOutput(record.output || null);
+                      setResult(record.output?.response || null);
+                      setError(null);
+                    }}
+                    className={`bg-white rounded-xl border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all ${manageMode ? '' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-700 truncate">
+                          {record.input.prompt || record.input.reference_image || '(无提示词)'}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">{record.model}</span>
+                          <span className="text-[10px] text-gray-400">{formatDate(record.created_at)}</span>
+                        </div>
+                      </div>
+                      {manageMode && (
+                        <button
+                          onClick={event => {
+                            event.stopPropagation();
+                            deleteRecord(record.id);
+                          }}
+                          disabled={deleting === record.id}
+                          className="w-8 h-8 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 flex items-center justify-center flex-shrink-0"
+                        >
+                          {deleting === record.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
       </main>
     </div>
   );

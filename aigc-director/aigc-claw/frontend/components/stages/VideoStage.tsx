@@ -151,11 +151,11 @@ function ClipRow({
   const hasChanges = editDesc !== clip.description;
 
   return (
-    <div className={`flex border rounded-xl overflow-hidden bg-white ${disabled ? 'opacity-50' : ''} ${
+    <div className={`flex flex-col xl:flex-row border rounded-xl overflow-hidden bg-white ${disabled ? 'opacity-50' : ''} ${
       isFailed ? 'border-red-200' : 'border-gray-200'
     }`}>
       {/* 左侧: 描述信息 */}
-      <div className="w-[280px] flex-shrink-0 p-4 border-r border-gray-100 flex flex-col">
+      <div className="w-full xl:w-72 xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
           <span className="flex items-center justify-center h-6 px-1.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold flex-shrink-0 whitespace-nowrap">
             {clip.index ?? clip.id.replace('Scene_', '')}
@@ -439,7 +439,7 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-800">视频生成</h2>
@@ -449,7 +449,7 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
         </p>
 
         {/* ── 视频生成参数 ── */}
-        <div className="flex items-center gap-6 mb-6 px-4 py-3 bg-white border border-gray-200 rounded-xl">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6 mb-6 px-4 py-3 bg-white border border-gray-200 rounded-xl">
           {/* 音效开关 */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-medium">音效</span>
