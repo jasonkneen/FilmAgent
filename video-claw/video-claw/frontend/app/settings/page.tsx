@@ -3,14 +3,10 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, Loader2, Save, Settings, XCircle } from 'lucide-react';
 import BrandHeader from '@/components/BrandHeader';
+import { fetchModelGroupsByType } from '@/lib/modelRegistry';
 import {
-  I2I_PROVIDERS,
-  LLM_PROVIDERS,
-  T2I_PROVIDERS,
-  VIDEO_PROVIDERS,
   VIDEO_RATIOS,
   VIDEO_RESOLUTIONS,
-  VLM_PROVIDERS,
   STYLES,
   type ProviderGroup,
 } from '@/config/models';
@@ -24,13 +20,15 @@ type Field = {
   options?: Array<{ id: string; label: string }> | ProviderGroup[];
 };
 
-const MODEL_SELECTS = {
-  llm: LLM_PROVIDERS,
-  vlm: VLM_PROVIDERS,
-  image_it2i: I2I_PROVIDERS,
-  image_t2i: T2I_PROVIDERS,
-  video: VIDEO_PROVIDERS,
-  eval: LLM_PROVIDERS,
+type ModelSelectKey = 'llm' | 'vlm' | 'image_it2i' | 'image_t2i' | 'video' | 'eval';
+
+const EMPTY_MODEL_SELECTS: Record<ModelSelectKey, ProviderGroup[]> = {
+  llm: [],
+  vlm: [],
+  image_it2i: [],
+  image_t2i: [],
+  video: [],
+  eval: [],
 };
 
 const GROUPS: Array<{ title: string; description: string; fields: Field[] }> = [
@@ -111,12 +109,12 @@ const GROUPS: Array<{ title: string; description: string; fields: Field[] }> = [
     title: 'Default Models',
     description: '主流程和 Pipeline 使用的默认模型。',
     fields: [
-      { path: 'models.llm', label: 'llm', type: 'select', options: MODEL_SELECTS.llm },
-      { path: 'models.vlm', label: 'vlm', type: 'select', options: MODEL_SELECTS.vlm },
-      { path: 'models.image_it2i', label: 'image_it2i', type: 'select', options: MODEL_SELECTS.image_it2i },
-      { path: 'models.image_t2i', label: 'image_t2i', type: 'select', options: MODEL_SELECTS.image_t2i },
-      { path: 'models.video', label: 'video', type: 'select', options: MODEL_SELECTS.video },
-      { path: 'models.eval', label: 'eval', type: 'select', options: MODEL_SELECTS.eval },
+      { path: 'models.llm', label: 'llm', type: 'select', options: [] },
+      { path: 'models.vlm', label: 'vlm', type: 'select', options: [] },
+      { path: 'models.image_it2i', label: 'image_it2i', type: 'select', options: [] },
+      { path: 'models.image_t2i', label: 'image_t2i', type: 'select', options: [] },
+      { path: 'models.video', label: 'video', type: 'select', options: [] },
+      { path: 'models.eval', label: 'eval', type: 'select', options: [] },
     ],
   },
   {
@@ -176,6 +174,7 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
+  const [modelSelects, setModelSelects] = useState<Record<ModelSelectKey, ProviderGroup[]>>(EMPTY_MODEL_SELECTS);
 
   useEffect(() => {
     const load = async () => {
@@ -196,6 +195,46 @@ export default function SettingsPage() {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchModelGroupsByType('llm'),
+      fetchModelGroupsByType('vlm'),
+      fetchModelGroupsByType('i2i'),
+      fetchModelGroupsByType('t2i'),
+      fetchModelGroupsByType('video'),
+    ])
+      .then(([llm, vlm, imageIt2i, imageT2i, video]) => {
+        if (cancelled) return;
+        setModelSelects({
+          llm,
+          vlm,
+          image_it2i: imageIt2i,
+          image_t2i: imageT2i,
+          video,
+          eval: llm,
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const groups = GROUPS.map(group => {
+    if (group.title !== 'Default Models') return group;
+    return {
+      ...group,
+      fields: group.fields.map(field => {
+        if (field.path === 'models.llm') return { ...field, options: modelSelects.llm };
+        if (field.path === 'models.vlm') return { ...field, options: modelSelects.vlm };
+        if (field.path === 'models.image_it2i') return { ...field, options: modelSelects.image_it2i };
+        if (field.path === 'models.image_t2i') return { ...field, options: modelSelects.image_t2i };
+        if (field.path === 'models.video') return { ...field, options: modelSelects.video };
+        if (field.path === 'models.eval') return { ...field, options: modelSelects.eval };
+        return field;
+      }),
+    };
+  });
 
   const updateField = (field: Field, raw: string | boolean) => {
     const value = field.type === 'number' ? Number(raw) || 0 : raw;
@@ -251,7 +290,7 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-5">
-            {GROUPS.map(group => (
+            {groups.map(group => (
               <section key={group.title} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="mb-4">
                   <h2 className="text-sm font-semibold text-gray-800">{group.title}</h2>

@@ -37,7 +37,7 @@ def normalize_video_duration(provider: str, model: str, duration: int) -> int:
         return min(max(int(duration), int(contract.get("min", duration))), int(contract.get("max", duration)))
     if provider == "dashscope":
         return 10 if duration >= 8 else 5
-    if provider == "seedance":
+    if provider == "seedance" or "seedance" in (model or "").lower():
         return min(max(duration, 5), 10)
     return max(duration, 1)
 

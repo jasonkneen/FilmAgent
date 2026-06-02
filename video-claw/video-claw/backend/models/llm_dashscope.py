@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Qwen LLM API 客户端（DashScope Generation API）
-支持 qwen3.5-plus, qwen3.5-max 等模型
+支持 qwen3.7-max、qwen3.6-max-preview、qwen3-max 等文本生成模型
 """
 
 import os
@@ -59,7 +59,7 @@ class QwenLLM:
 
         :param prompt: Text prompt
         :param image_urls: Ignored in this LLM implementation (use VLM for multimodal)
-        :param model: Model name (e.g., qwen3.5-vl, qwen3.5-plus, qwen3.5-max)
+        :param model: Model name (e.g., qwen3.7-max, qwen3.6-max-preview, qwen3-max)
         :param web_search: If True, adds enable_search: True to API call
         """
         if dashscope is None:
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     # 支持的模型列表
 
-    MODELS = ["qwen3.6-max-preview", "qwen3-max", "deepseek-v3.2"]
+    MODELS = ["qwen3.7-max", "qwen3.6-max-preview", "qwen3-max", "deepseek-v3.2"]
 
     print("=== DashScope LLM 可用性测试 ===")
     api_key = Config.DASHSCOPE_API_KEY

@@ -39,11 +39,8 @@ import {
   type ApiModelOption,
   type StandardTemplateOption,
 } from '@/lib/workflowApi';
+import { fetchModelGroupsByType, groupModelOptions } from '@/lib/modelRegistry';
 import {
-  I2I_PROVIDERS,
-  LLM_PROVIDERS,
-  T2I_PROVIDERS,
-  VIDEO_PROVIDERS,
   VIDEO_RATIOS,
   VIDEO_RESOLUTIONS,
   type ProviderGroup,
@@ -57,13 +54,6 @@ interface PipelinePageProps {
   title: string;
   subtitle: string;
 }
-
-const DEFAULTS = {
-  llm: LLM_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || LLM_PROVIDERS[0].models[0].id,
-  image: T2I_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || T2I_PROVIDERS[0].models[0].id,
-  editImage: I2I_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || I2I_PROVIDERS[0].models[0].id,
-  video: VIDEO_PROVIDERS.flatMap(p => p.models).find(m => m.default)?.id || VIDEO_PROVIDERS[0].models[0].id,
-};
 
 const STANDARD_STYLE_PRESETS = [
   {
@@ -187,31 +177,14 @@ function SelectField({
   );
 }
 
-function groupApiModels(models: ApiModelOption[], fallback: ProviderGroup[]): ProviderGroup[] {
-  if (!models.length) return fallback;
-  const providerLabels: Record<string, string> = {
-    dashscope: 'DashScope',
-    openai: 'OpenAI',
-    seedream: 'Seedream',
-    seedance: 'Seedance',
-    kling: 'Kling',
-  };
-  const groups = new Map<string, ProviderGroup>();
-  for (const model of models) {
-    if (!groups.has(model.provider)) {
-      groups.set(model.provider, {
-        provider: model.provider,
-        label: providerLabels[model.provider] || model.provider,
-        models: [],
-      });
-    }
-    groups.get(model.provider)!.models.push({
-      id: model.id,
-      label: model.label || model.id,
-      default: model.api_contract_verified,
-    });
-  }
-  return Array.from(groups.values());
+function groupApiModels(models: ApiModelOption[]): ProviderGroup[] {
+  return groupModelOptions(models).map(group => ({
+    ...group,
+    models: group.models.map(model => {
+      const source = models.find(item => item.id === model.id);
+      return { ...model, default: Boolean(source?.api_contract_verified) };
+    }),
+  }));
 }
 
 function firstModelId(groups: ProviderGroup[], preferred?: string) {
@@ -702,8 +675,9 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [task, setTask] = useState<PipelineTask | null>(null);
-  const [imageModelGroups, setImageModelGroups] = useState<ProviderGroup[]>(pipeline === 'digital_human' ? I2I_PROVIDERS : T2I_PROVIDERS);
-  const [videoModelGroups, setVideoModelGroups] = useState<ProviderGroup[]>(VIDEO_PROVIDERS);
+  const [imageModelGroups, setImageModelGroups] = useState<ProviderGroup[]>([]);
+  const [videoModelGroups, setVideoModelGroups] = useState<ProviderGroup[]>([]);
+  const [llmModelGroups, setLlmModelGroups] = useState<ProviderGroup[]>([]);
 
   const [text, setText] = useState('');
   const [standardMode, setStandardMode] = useState<'inspiration' | 'copy'>('inspiration');
@@ -725,11 +699,9 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
   const [goodsTitle, setGoodsTitle] = useState('');
   const [goodsText, setGoodsText] = useState('');
 
-  const [llmModel, setLlmModel] = useState(DEFAULTS.llm);
-  const [imageModel, setImageModel] = useState(DEFAULTS.image);
-  const [videoModel, setVideoModel] = useState(
-    pipeline === 'action_transfer' ? 'wan2.7-videoedit' : pipeline === 'digital_human' ? 'wan2.7-r2v' : DEFAULTS.video
-  );
+  const [llmModel, setLlmModel] = useState('');
+  const [imageModel, setImageModel] = useState('');
+  const [videoModel, setVideoModel] = useState('');
   const [ratio, setRatio] = useState('9:16');
   const [videoResolution, setVideoResolution] = useState('720P');
   const [duration, setDuration] = useState(5);
@@ -751,27 +723,34 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
 
     fetchApiModels({ mediaType: 'image', ability: imageAbility, verifiedOnly: true })
       .then(models => {
-        const groups = groupApiModels(models, pipeline === 'digital_human' ? I2I_PROVIDERS : T2I_PROVIDERS);
+        const groups = groupApiModels(models);
         setImageModelGroups(groups);
-        setImageModel(current => firstModelId(groups, current || DEFAULTS.image));
+        setImageModel(current => firstModelId(groups, current));
       })
       .catch(() => {});
 
     if (pipeline !== 'standard' || standardVideoMode === 'dynamic_video' || (templateMode && templateMediaKind === 'video')) {
       fetchApiModels({ mediaType: 'video', ability: videoAbility, verifiedOnly: true })
         .then(models => {
-          const groups = groupApiModels(models, VIDEO_PROVIDERS);
+          const groups = groupApiModels(models);
           setVideoModelGroups(groups);
-          const preferred = pipeline === 'standard'
-            ? DEFAULTS.video
-            : pipeline === 'action_transfer'
-              ? 'wan2.7-videoedit'
-              : 'wan2.7-r2v';
-          setVideoModel(current => firstModelId(groups, current || preferred));
+          setVideoModel(current => firstModelId(groups, current));
         })
         .catch(() => {});
     }
   }, [pipeline, standardVideoMode, templateMode, templateMediaKind]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchModelGroupsByType('llm')
+      .then(groups => {
+        if (cancelled) return;
+        setLlmModelGroups(groups);
+        setLlmModel(current => firstModelId(groups, current));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (pipeline !== 'standard') return;
@@ -1262,7 +1241,7 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
               <div className="mt-4 p-4 bg-gray-50 rounded-xl space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {(pipeline === 'digital_human' || pipeline === 'standard') && (
-                    <SelectField label="LLM 模型" value={llmModel} onChange={setLlmModel} groups={LLM_PROVIDERS} />
+                    <SelectField label="LLM 模型" value={llmModel} onChange={setLlmModel} groups={llmModelGroups} />
                   )}
                   {pipeline !== 'action_transfer' && (
                     <SelectField label="图片模型" value={imageModel} onChange={setImageModel} groups={imageModelGroups} />

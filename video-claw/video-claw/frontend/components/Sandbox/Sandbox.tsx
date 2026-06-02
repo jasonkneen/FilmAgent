@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, DragEvent } from 'react';
 import { Sparkles, Image, Video, MessageSquare, Zap, Loader2, Copy, Check, Trash2, X, FolderOpen, Upload, Globe, Hexagon } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { LLM_MODELS, T2I_MODELS, I2I_MODELS, VIDEO_MODELS, VLM_MODELS } from '@/config/models';
+import type { ModelOption, ProviderGroup } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
 import { fetchSandboxTasks, uploadMedia } from '@/lib/workflowApi';
+import { fetchModelGroupsByType } from '@/lib/modelRegistry';
 
 // 辅助函数：将相对路径转换为完整 URL
 const toMediaUrl = (path: string) => {
@@ -37,6 +38,14 @@ async function readJsonResponse(resp: Response) {
 
 // 工具类型
 type ToolType = 'llm' | 'vlm' | 't2i' | 'i2i' | 'video';
+
+const EMPTY_MODEL_GROUPS: Record<ToolType, ProviderGroup[]> = {
+  llm: [],
+  vlm: [],
+  t2i: [],
+  i2i: [],
+  video: [],
+};
 
 interface Tool {
   id: ToolType;
@@ -299,6 +308,7 @@ function ImageUploader({
 
 export default function SandboxPage() {
   const [activeTool, setActiveTool] = useState<ToolType>('llm');
+  const [modelGroups, setModelGroups] = useState<Record<ToolType, ProviderGroup[]>>(EMPTY_MODEL_GROUPS);
   const [prompt, setPrompt] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -313,6 +323,18 @@ export default function SandboxPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
   const searchParams = useSearchParams();
+
+  const flattenModels = (groups: ProviderGroup[]): ModelOption[] => groups.flatMap(group => group.models);
+
+  const getModels = () => flattenModels(modelGroups[activeTool] || []);
+
+  const firstModelId = (groups: ProviderGroup[]) => {
+    const models = flattenModels(groups);
+    return models.find(model => model.default)?.id || models[0]?.id || '';
+  };
+
+  const [selectedModel, setSelectedModel] = useState('');
+  const [webSearch, setWebSearch] = useState(false);
 
   // 获取历史记录
   const fetchHistory = async () => {
@@ -329,6 +351,25 @@ export default function SandboxPage() {
 
   useEffect(() => {
     fetchHistory();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchModelGroupsByType('llm'),
+      fetchModelGroupsByType('vlm'),
+      fetchModelGroupsByType('t2i'),
+      fetchModelGroupsByType('i2i'),
+      fetchModelGroupsByType('video'),
+    ])
+      .then(([llm, vlm, t2i, i2i, video]) => {
+        if (cancelled) return;
+        const groups = { llm, vlm, t2i, i2i, video };
+        setModelGroups(groups);
+        setSelectedModel(current => current || firstModelId(groups[activeTool]));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   const applyRecord = (record: HistoryRecord) => {
@@ -414,36 +455,10 @@ export default function SandboxPage() {
     }
   };
 
-  // 根据工具类型获取模型列表
-  const getModels = () => {
-    switch (activeTool) {
-      case 'llm': return LLM_MODELS;
-      case 'vlm': return VLM_MODELS;
-      case 't2i': return T2I_MODELS;
-      case 'i2i': return I2I_MODELS;
-      case 'video': return VIDEO_MODELS;
-      default: return LLM_MODELS;
-    }
-  };
-
-  const [selectedModel, setSelectedModel] = useState(getModels().find(m => m.default)?.id || getModels()[0]?.id || '');
-  const [webSearch, setWebSearch] = useState(false);
-
   // 工具切换时重置模型选择
   const handleToolChange = (tool: ToolType) => {
     setActiveTool(tool);
-    // 立即更新模型选择
-    const models = (() => {
-      switch (tool) {
-        case 'llm': return LLM_MODELS;
-        case 'vlm': return VLM_MODELS;
-        case 't2i': return T2I_MODELS;
-        case 'i2i': return I2I_MODELS;
-        case 'video': return VIDEO_MODELS;
-        default: return LLM_MODELS;
-      }
-    })();
-    setSelectedModel(models.find(m => m.default)?.id || models[0]?.id || '');
+    setSelectedModel(firstModelId(modelGroups[tool]));
     setResult(null);
     setCurrentOutput(null);
     setError(null);
@@ -452,25 +467,17 @@ export default function SandboxPage() {
 
   // 监听工具变化，确保模型选择同步
   useEffect(() => {
-    const models = (() => {
-      switch (activeTool) {
-        case 'llm': return LLM_MODELS;
-        case 'vlm': return VLM_MODELS;
-        case 't2i': return T2I_MODELS;
-        case 'i2i': return I2I_MODELS;
-        case 'video': return VIDEO_MODELS;
-        default: return LLM_MODELS;
-      }
-    })();
+    const models = getModels();
     // 只有当前模型不在新工具的模型列表中时才更新
     const currentInList = models.some(m => m.id === selectedModel);
     if (!currentInList) {
       setSelectedModel(models.find(m => m.default)?.id || models[0]?.id || '');
     }
-  }, [activeTool]);
+  }, [activeTool, modelGroups, selectedModel]);
 
   // 检查是否可以提交
   const canSubmit = () => {
+    if (!selectedModel) return false;
     if (!prompt.trim() && activeTool !== 't2i') return false;
     if ((activeTool === 'i2i') && !imageUrl) return false;
     return true;

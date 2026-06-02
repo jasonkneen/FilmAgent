@@ -83,7 +83,10 @@ export interface ApiModelOption {
   id: string;
   label: string;
   provider: string;
-  media_type: 'image' | 'video';
+  family?: string;
+  media_type?: 'image' | 'video';
+  model_type?: 'llm' | 'vlm' | 't2i' | 'i2i' | 'video';
+  type?: string[];
   ability_type?: string;
   ability_types?: string[];
   adapter_ability_types?: string[];
@@ -183,11 +186,13 @@ export async function deletePipelineTask(taskId: string): Promise<void> {
 
 export async function fetchApiModels(params: {
   mediaType?: 'image' | 'video';
+  modelType?: 'llm' | 'vlm' | 't2i' | 'i2i' | 'video';
   ability?: string;
   verifiedOnly?: boolean;
 } = {}): Promise<ApiModelOption[]> {
   const search = new URLSearchParams();
   if (params.mediaType) search.set('media_type', params.mediaType);
+  if (params.modelType) search.set('model_type', params.modelType);
   if (params.ability) search.set('ability', params.ability);
   if (params.verifiedOnly) search.set('verified_only', 'true');
   const resp = await fetch(`/api/models${search.toString() ? `?${search.toString()}` : ''}`);

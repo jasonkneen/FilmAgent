@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle, Circle, Loader, Edit3, AlertCircle, Square, Zap, Settings2, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
-import { LLM_PROVIDERS, T2I_PROVIDERS, I2I_PROVIDERS, VIDEO_PROVIDERS, VLM_PROVIDERS, VIDEO_RATIOS, VIDEO_RESOLUTIONS, ProviderGroup } from '@/config/models';
+import { VIDEO_RATIOS, VIDEO_RESOLUTIONS, type ProviderGroup } from '@/config/models';
+import { fetchModelGroupsByType } from '@/lib/modelRegistry';
 
 export type StageStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'error' | 'stopped';
 
@@ -89,6 +90,11 @@ function ModelSelector({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [llmProviders, setLlmProviders] = useState<ProviderGroup[]>([]);
+  const [vlmProviders, setVlmProviders] = useState<ProviderGroup[]>([]);
+  const [t2iProviders, setT2iProviders] = useState<ProviderGroup[]>([]);
+  const [i2iProviders, setI2iProviders] = useState<ProviderGroup[]>([]);
+  const [videoProviders, setVideoProviders] = useState<ProviderGroup[]>([]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -97,6 +103,26 @@ function ModelSelector({
     if (open) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchModelGroupsByType('llm')
+      .then(groups => { if (!cancelled) setLlmProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('vlm')
+      .then(groups => { if (!cancelled) setVlmProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('t2i')
+      .then(groups => { if (!cancelled) setT2iProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('i2i')
+      .then(groups => { if (!cancelled) setI2iProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('video')
+      .then(groups => { if (!cancelled) setVideoProviders(groups); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const update = (key: keyof ModelConfig, val: string | boolean) => {
     onChange({ ...config, [key]: val });
@@ -123,23 +149,23 @@ function ModelSelector({
         <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl shadow-lg border border-gray-200 p-3 z-50 space-y-2.5">
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-gray-400 font-medium">LLM 模型</span>
-            <ProviderSelect value={config.llm_model} providers={LLM_PROVIDERS} onChange={v => update('llm_model', v)} />
+            <ProviderSelect value={config.llm_model} providers={llmProviders} onChange={v => update('llm_model', v)} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-gray-400 font-medium">VLM 评估模型</span>
-            <ProviderSelect value={config.vlm_model} providers={VLM_PROVIDERS} onChange={v => update('vlm_model', v)} />
+            <ProviderSelect value={config.vlm_model} providers={vlmProviders} onChange={v => update('vlm_model', v)} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-gray-400 font-medium">文生图</span>
-            <ProviderSelect value={config.image_t2i_model} providers={T2I_PROVIDERS} onChange={v => update('image_t2i_model', v)} />
+            <ProviderSelect value={config.image_t2i_model} providers={t2iProviders} onChange={v => update('image_t2i_model', v)} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-gray-400 font-medium">图生图</span>
-            <ProviderSelect value={config.image_it2i_model} providers={I2I_PROVIDERS} onChange={v => update('image_it2i_model', v)} />
+            <ProviderSelect value={config.image_it2i_model} providers={i2iProviders} onChange={v => update('image_it2i_model', v)} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-gray-400 font-medium">视频模型</span>
-            <ProviderSelect value={config.video_model} providers={VIDEO_PROVIDERS} onChange={v => update('video_model', v)} />
+            <ProviderSelect value={config.video_model} providers={videoProviders} onChange={v => update('video_model', v)} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-gray-400 font-medium">视频比例</span>

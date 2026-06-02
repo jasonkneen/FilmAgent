@@ -4,8 +4,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Play, Settings2, Clock, ArrowRight, Zap, CheckCircle, Trash2, X, Lock, Globe, ListOrdered, Upload, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { PROMPT_EXAMPLES } from '@/config/examples';
-import { STYLES, VIDEO_RATIOS, VIDEO_RESOLUTIONS, LLM_PROVIDERS, T2I_PROVIDERS, I2I_PROVIDERS, VIDEO_PROVIDERS, VLM_PROVIDERS } from '@/config/models';
+import { STYLES, VIDEO_RATIOS, VIDEO_RESOLUTIONS, type ProviderGroup } from '@/config/models';
 import { STAGES } from './TopBar';
+import { fetchModelGroupsByType } from '@/lib/modelRegistry';
 
 export interface ProjectParams {
   idea: string;
@@ -82,8 +83,33 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [llmProviders, setLlmProviders] = useState<ProviderGroup[]>([]);
+  const [vlmProviders, setVlmProviders] = useState<ProviderGroup[]>([]);
+  const [t2iProviders, setT2iProviders] = useState<ProviderGroup[]>([]);
+  const [i2iProviders, setI2iProviders] = useState<ProviderGroup[]>([]);
+  const [videoProviders, setVideoProviders] = useState<ProviderGroup[]>([]);
   const modelConfigReady = Boolean(selectedLLM && selectedVLM && selectedT2I && selectedI2I && selectedVideo && selectedRatio && selectedResolution);
   const canStart = Boolean((idea.trim() || uploadedFile) && modelConfigReady && !configLoading);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchModelGroupsByType('llm')
+      .then(groups => { if (!cancelled) setLlmProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('vlm')
+      .then(groups => { if (!cancelled) setVlmProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('t2i')
+      .then(groups => { if (!cancelled) setT2iProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('i2i')
+      .then(groups => { if (!cancelled) setI2iProviders(groups); })
+      .catch(() => {});
+    fetchModelGroupsByType('video')
+      .then(groups => { if (!cancelled) setVideoProviders(groups); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -481,7 +507,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                     onChange={e => setSelectedLLM(e.target.value)}
                     className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-gray-700 outline-none"
                   >
-                    {LLM_PROVIDERS.map(pg => (
+                    {llmProviders.map(pg => (
                       <optgroup key={pg.provider} label={pg.label}>
                         {pg.models.map(m => (
                           <option key={m.id} value={m.id}>{m.label}</option>
@@ -497,7 +523,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                     onChange={e => setSelectedVLM(e.target.value)}
                     className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-gray-700 outline-none"
                   >
-                    {VLM_PROVIDERS.map(pg => (
+                    {vlmProviders.map(pg => (
                       <optgroup key={pg.provider} label={pg.label}>
                         {pg.models.map(m => (
                           <option key={m.id} value={m.id}>{m.label}</option>
@@ -513,7 +539,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                     onChange={e => setSelectedT2I(e.target.value)}
                     className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-gray-700 outline-none"
                   >
-                    {T2I_PROVIDERS.map(pg => (
+                    {t2iProviders.map(pg => (
                       <optgroup key={pg.provider} label={pg.label}>
                         {pg.models.map(m => (
                           <option key={m.id} value={m.id}>{m.label}</option>
@@ -529,7 +555,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                     onChange={e => setSelectedI2I(e.target.value)}
                     className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-gray-700 outline-none"
                   >
-                    {I2I_PROVIDERS.map(pg => (
+                    {i2iProviders.map(pg => (
                       <optgroup key={pg.provider} label={pg.label}>
                         {pg.models.map(m => (
                           <option key={m.id} value={m.id}>{m.label}</option>
@@ -545,7 +571,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                     onChange={e => setSelectedVideo(e.target.value)}
                     className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-gray-700 outline-none"
                   >
-                    {VIDEO_PROVIDERS.map(pg => (
+                    {videoProviders.map(pg => (
                       <optgroup key={pg.provider} label={pg.label}>
                         {pg.models.map(m => (
                           <option key={m.id} value={m.id}>{m.label}</option>
