@@ -298,11 +298,6 @@ class VideoDirectorAgent(AgentInterface):
                             if not seg: continue
                             prompt = self._assemble_prompt(seg, style_prompt, video_data=clip)
 
-                            print("#"*100)
-                            print(clip)
-                            print(prompt)
-                            return
-
                             img_path = self._get_reference_image(sid, seg_id, scene_map)
                             duration = seg.get("total_duration", 10)
                             fut = executor.submit(
