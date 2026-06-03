@@ -1299,7 +1299,7 @@ class StoryboardAgent(AgentInterface):
         chars = script_data.get("characters", [])
         sets = script_data.get("settings", [])
         
-        self._report_progress("分镜", f"开始生成 {len(episodes_to_proc)} 集缺失的分镜...", 5)
+        self._report_progress("分镜", f"开始设计 {len(episodes_to_proc)} 集的分镜...", 5)
         total_to_process = len(episodes_to_proc)
         completed_count = 0
         progress_state = {"percent": 10}
