@@ -222,6 +222,28 @@ export async function uploadMedia(file: File): Promise<{ filename: string; file_
   return resp.json();
 }
 
+export async function uploadArtifactImage(
+  sessionId: string,
+  stage: string,
+  itemType: string,
+  itemId: string,
+  file: File,
+): Promise<{ status: string; path: string; artifact: any; status_map: Record<string, string> }> {
+  const formData = new FormData();
+  formData.append('item_type', itemType);
+  formData.append('item_id', itemId);
+  formData.append('file', file);
+  const resp = await fetch(`/api/project/${sessionId}/artifact/${stage}/upload_image`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: '上传图片失败' }));
+    throw new Error(err.detail || '上传图片失败');
+  }
+  return resp.json();
+}
+
 export function subscribePipelineTask(
   taskId: string,
   onEvent: (event: PipelineTaskEvent) => void,

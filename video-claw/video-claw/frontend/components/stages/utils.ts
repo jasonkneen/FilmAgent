@@ -11,6 +11,15 @@ export function assetUrl(path: string): string {
   return '/' + path;
 }
 
+export function assetVersionLabel(path: string, index: number): string {
+  const file = (path || '').split('/').pop() || '';
+  const uploadMatch = file.match(/_upload_(v\d+)/i);
+  if (uploadMatch) return `用户上传: ${uploadMatch[1].toLowerCase()}`;
+  const aiMatch = file.match(/_v(\d+)\.[^.]+$/i);
+  const version = aiMatch ? `v${aiMatch[1]}` : `v${index + 1}`;
+  return `AI生成: ${version}`;
+}
+
 /* ─── 剧本 / 分镜 结构化文本解析 ─── */
 
 export interface ParsedCharacter {

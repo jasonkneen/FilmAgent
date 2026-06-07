@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Film, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, AlertTriangle, Play, Volume2, VolumeX, Clapperboard, Edit2, Save } from 'lucide-react';
+import { Film, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, AlertTriangle, Play, Volume2, VolumeX, Clapperboard, Edit2, Save, X } from 'lucide-react';
 import type { StageViewProps } from './types';
 import { assetUrl } from './utils';
 import StageActions from './StageActions';
@@ -124,6 +124,7 @@ function ClipRow({
   onRegenerate,
   onSelectVersion,
   onToggleEdit,
+  onCancelEdit,
   isStageRunning,
   isRegenerating,
   isEditing,
@@ -139,6 +140,7 @@ function ClipRow({
   onRegenerate: () => void;
   onSelectVersion: (path: string) => void;
   onToggleEdit?: () => void;
+  onCancelEdit?: () => void;
   isStageRunning?: boolean;
   isRegenerating?: boolean;
   isEditing?: boolean;
@@ -159,7 +161,7 @@ function ClipRow({
       isFailed ? 'border-red-200' : 'border-gray-200'
     }`}>
       {/* 左侧: 描述信息 */}
-      <div className="w-full xl:w-72 xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
+      <div className="w-full xl:w-80 xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
           <span className="flex items-center justify-center h-6 px-1.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold flex-shrink-0 whitespace-nowrap">
             {clip.index ?? clip.id.replace('Scene_', '')}
@@ -182,18 +184,26 @@ function ClipRow({
           {/* 编辑/保存按钮 */}
           {canEdit && !isStageRunning && (
             isEditing ? (
-              <button
-                onClick={onSavePrompt}
-                disabled={!hasChanges || isSaving}
-                className={`ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  hasChanges && !isSaving
-                    ? 'text-white bg-emerald-500 hover:bg-emerald-600'
-                    : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                }`}
-              >
-                <Save className="w-3 h-3" />
-                {isSaving ? '保存中' : '保存'}
-              </button>
+              <div className="ml-auto flex gap-1">
+                <button
+                  onClick={onCancelEdit}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100"
+                >
+                  <X className="w-3 h-3" />取消
+                </button>
+                <button
+                  onClick={onSavePrompt}
+                  disabled={!hasChanges || isSaving}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    hasChanges && !isSaving
+                      ? 'text-white bg-emerald-500 hover:bg-emerald-600'
+                      : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                  }`}
+                >
+                  <Save className="w-3 h-3" />
+                  {isSaving ? '保存中' : '保存'}
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onToggleEdit}
@@ -463,6 +473,16 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
     });
   };
 
+  const handleCancelEdit = (clipId: string) => {
+    const clip = clips.find(item => item.id === clipId);
+    setEditDescs(prev => ({ ...prev, [clipId]: clip?.description || '' }));
+    setEditingIds(prev => {
+      const next = new Set(prev);
+      next.delete(clipId);
+      return next;
+    });
+  };
+
   const handleRegenerate = (clipId: string) => {
     const clip = clips.find(c => c.id === clipId);
     regenerationStartCounts.current[clipId] = clip?.versions?.length ?? 0;
@@ -615,6 +635,7 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
                               onRegenerate={() => handleRegenerate(clip.id)}
                               onSelectVersion={path => handleSelectVersion(clip.id, path)}
                               onToggleEdit={() => handleToggleEdit(clip.id)}
+                              onCancelEdit={() => handleCancelEdit(clip.id)}
                               isStageRunning={state.status === 'running'}
                               isRegenerating={regeneratingIds.has(clip.id)}
                               isEditing={editingIds.has(clip.id)}

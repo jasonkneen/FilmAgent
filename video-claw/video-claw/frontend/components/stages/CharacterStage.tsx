@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Users, MapPin, RefreshCw, Save, X, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus } from 'lucide-react';
+import { Users, MapPin, RefreshCw, Save, X, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus, Edit2, Upload } from 'lucide-react';
 import type { StageViewProps } from './types';
-import { assetUrl } from './utils';
+import { assetUrl, assetVersionLabel } from './utils';
+import { uploadArtifactImage } from '@/lib/workflowApi';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
 import ImageLightbox from './ImageLightbox';
@@ -100,7 +101,7 @@ function ImageGallery({
               <div className={`text-center text-[10px] py-0.5 ${
                 isSelected ? 'bg-violet-500 text-white font-medium' : 'bg-gray-50 text-gray-400'
               }`}>
-                v{i + 1}
+                {assetVersionLabel(path, i)}
               </div>
             </div>
           );
@@ -134,8 +135,13 @@ function AssetRow({
   onDescChange,
   onRegenerate,
   onSelectVersion,
+  onSaveEdit,
+  onCancelEdit,
+  onToggleEdit,
+  onUploadImage,
   isStageRunning,
   isRegenerating,
+  isUploading,
 }: {
   asset: AssetVersion;
   type: 'character' | 'setting';
@@ -144,8 +150,13 @@ function AssetRow({
   onDescChange: (val: string) => void;
   onRegenerate: () => void;
   onSelectVersion: (path: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onToggleEdit: () => void;
+  onUploadImage: (file: File) => void;
   isStageRunning?: boolean;
   isRegenerating?: boolean;
+  isUploading?: boolean;
 }) {
   const isPending = asset.status === 'pending' || isRegenerating;
   const isFailed = asset.status === 'failed' && !isRegenerating;
@@ -172,16 +183,43 @@ function AssetRow({
           {isFailed && (
             <span className="text-[10px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded">失败</span>
           )}
+          {!isStageRunning && (
+            isEditing ? (
+              <div className="ml-auto flex gap-1">
+                <button
+                  onClick={onCancelEdit}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100"
+                >
+                  <X className="w-3 h-3" />取消
+                </button>
+                <button
+                  onClick={onSaveEdit}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-600"
+                >
+                  <Save className="w-3 h-3" />保存
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onToggleEdit}
+                className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                <Edit2 className="w-3 h-3" />修改
+              </button>
+            )
+          )}
         </div>
         {isEditing ? (
           <textarea
             value={editDesc}
             onChange={e => onDescChange(e.target.value)}
             rows={5}
-            className="flex-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2 resize-none focus:outline-none focus:ring-1 focus:ring-violet-300"
+            className="h-[120px] text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2 resize-none focus:outline-none focus:ring-1 focus:ring-violet-300"
           />
         ) : (
-          <p className="flex-1 text-xs text-gray-600 leading-relaxed">{asset.description}</p>
+          <div className="h-[120px] overflow-y-auto pr-1 custom-scrollbar">
+            <p className="text-xs text-gray-600 leading-relaxed">{asset.description}</p>
+          </div>
         )}
         {/* 已有图片显示重新生成；失败/旧数据空资源允许补生成。 */}
         {!isStageRunning && (hasImage || isFailed || canGenerateMissing) && (
@@ -199,6 +237,27 @@ function AssetRow({
             <RefreshCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin' : ''}`} />
             {isRegenerating ? '生成中...' : isFailed ? '点击重试' : hasImage ? '重新生成' : '生成'}
           </button>
+        )}
+        {!isStageRunning && (
+          <label className={`mt-2 ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            isUploading
+              ? 'text-gray-400 bg-gray-100 cursor-wait'
+              : 'text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer'
+          }`}>
+            {isUploading ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+            {isUploading ? '上传中...' : '上传图片'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={isUploading}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                e.currentTarget.value = '';
+                if (file) onUploadImage(file);
+              }}
+            />
+          </label>
         )}
       </div>
 
@@ -272,11 +331,10 @@ function AssetRow({
 }
 
 /* ─── 主组件 ─── */
-export default function CharacterStage({ state, sessionId, onConfirm, onIntervene, onRegenerate, onSaveSelections, showConfirm, isRunning, hasPendingItems, hasNextStageStarted }: StageViewProps) {
+export default function CharacterStage({ state, sessionId, onConfirm, onIntervene, onRegenerate, onUpdateArtifact, onSaveSelections, showConfirm, isRunning, hasPendingItems, hasNextStageStarted }: StageViewProps) {
   const characters: AssetVersion[] = state.artifact?.characters || [];
   const settingsData: AssetVersion[] = state.artifact?.settings || [];
 
-  const [isEditing, setIsEditing] = useState(false);
   const [editChars, setEditChars] = useState<Record<string, string>>({});
   const [editSets, setEditSets] = useState<Record<string, string>>({});
   // 跟踪前端选择的版本（覆盖后端返回的 selected）
@@ -284,6 +342,8 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
   const [selectedSets, setSelectedSets] = useState<Record<string, string>>({});
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const regenerationStartCounts = useRef<Record<string, number>>({});
+  const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
+  const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
 
   const allAssets = React.useMemo(() => [...characters, ...settingsData], [characters, settingsData]);
 
@@ -309,29 +369,64 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
 
   const hasChars = characters.length > 0;
   const hasSets = settingsData.length > 0;
-  const hasAssets = hasChars || hasSets;
 
-  const startEdit = useCallback(() => {
+  const startEdit = useCallback((id: string) => {
     const cd: Record<string, string> = {};
     characters.forEach(c => { cd[c.id] = c.description; });
     setEditChars(cd);
     const sd: Record<string, string> = {};
     settingsData.forEach(s => { sd[s.id] = s.description; });
     setEditSets(sd);
-    setIsEditing(true);
+    setEditingIds(prev => new Set(prev).add(id));
   }, [characters, settingsData]);
 
-  const cancelEdit = () => setIsEditing(false);
+  const cancelEdit = (id: string) => {
+    setEditingIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
 
-  const saveEdit = () => {
+  const saveEdit = (id: string) => {
     // 发送修改后的描述，后端可以用于下次生成
     onIntervene({
       update_descriptions: {
-        characters: editChars,
-        settings: editSets,
+        characters: id in editChars ? { [id]: editChars[id] } : {},
+        settings: id in editSets ? { [id]: editSets[id] } : {},
       },
     });
-    setIsEditing(false);
+    cancelEdit(id);
+  };
+
+  const handleUploadImage = async (type: 'characters' | 'settings', id: string, file: File) => {
+    setUploadingIds(prev => new Set(prev).add(id));
+    try {
+      const result = await uploadArtifactImage(sessionId, 'character_design', type, id, file);
+      const artifact = result.artifact;
+      if (artifact) {
+        onUpdateArtifact?.({
+          characters: artifact.characters || [],
+          settings: artifact.settings || [],
+        });
+      }
+      if (artifact?.characters) {
+        const char = artifact.characters.find((item: AssetVersion) => item.id === id);
+        if (char?.selected) setSelectedChars(prev => ({ ...prev, [id]: char.selected }));
+      }
+      if (artifact?.settings) {
+        const setting = artifact.settings.find((item: AssetVersion) => item.id === id);
+        if (setting?.selected) setSelectedSets(prev => ({ ...prev, [id]: setting.selected }));
+      }
+    } catch (error) {
+      console.error('上传图片失败:', error);
+    } finally {
+      setUploadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   };
 
   const handleRegenerate = (type: 'characters' | 'settings', id: string) => {
@@ -379,26 +474,6 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-800">角色 / 场景设计</h2>
-          {hasAssets && state.status === 'waiting' && !isEditing && (
-            <button
-              onClick={startEdit}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-            >
-              修改描述
-            </button>
-          )}
-          {isEditing && (
-            <div className="flex gap-2">
-              <button onClick={cancelEdit}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100">
-                <X className="w-3.5 h-3.5" />取消
-              </button>
-              <button onClick={saveEdit}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-600">
-                <Save className="w-3.5 h-3.5" />保存
-              </button>
-            </div>
-          )}
         </div>
         <p className="text-sm text-gray-500 mb-6">
           生成角色4视图 (正面特写·正面全身·侧面全身·背面全身) 和场景全景图
@@ -426,13 +501,18 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
                   key={asset.id}
                   asset={{ ...asset, selected: getCharSelected(asset) }}
                   type="character"
-                  isEditing={isEditing}
+                  isEditing={editingIds.has(asset.id)}
                   editDesc={editChars[asset.id] || asset.description}
                   onDescChange={val => setEditChars(prev => ({ ...prev, [asset.id]: val }))}
                   onRegenerate={() => handleRegenerate('characters', asset.id)}
                   onSelectVersion={path => handleSelectCharVersion(asset.id, path)}
+                  onToggleEdit={() => startEdit(asset.id)}
+                  onSaveEdit={() => saveEdit(asset.id)}
+                  onCancelEdit={() => cancelEdit(asset.id)}
+                  onUploadImage={file => handleUploadImage('characters', asset.id, file)}
                   isStageRunning={state.status === 'running'}
                   isRegenerating={regeneratingIds.has(asset.id)}
+                  isUploading={uploadingIds.has(asset.id)}
                 />
               ))}
             </div>
@@ -452,13 +532,18 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
                   key={asset.id}
                   asset={{ ...asset, selected: getSetSelected(asset) }}
                   type="setting"
-                  isEditing={isEditing}
+                  isEditing={editingIds.has(asset.id)}
                   editDesc={editSets[asset.id] || asset.description}
                   onDescChange={val => setEditSets(prev => ({ ...prev, [asset.id]: val }))}
                   onRegenerate={() => handleRegenerate('settings', asset.id)}
                   onSelectVersion={path => handleSelectSetVersion(asset.id, path)}
+                  onToggleEdit={() => startEdit(asset.id)}
+                  onSaveEdit={() => saveEdit(asset.id)}
+                  onCancelEdit={() => cancelEdit(asset.id)}
+                  onUploadImage={file => handleUploadImage('settings', asset.id, file)}
                   isStageRunning={state.status === 'running'}
                   isRegenerating={regeneratingIds.has(asset.id)}
+                  isUploading={uploadingIds.has(asset.id)}
                 />
               ))}
             </div>
@@ -475,8 +560,6 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
         status={state.status}
         onConfirm={onConfirm}
         showConfirm={showConfirm}
-        onEdit={startEdit}
-        onSave={isEditing ? saveEdit : undefined}
         onRegenerate={onRegenerate}
         stageId="character_design"
         hasPendingItems={hasPendingItems}

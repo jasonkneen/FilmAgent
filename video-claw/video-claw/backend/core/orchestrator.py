@@ -7,6 +7,8 @@
 import json
 import logging
 import os
+import re
+import shutil
 import threading
 import time
 import copy
@@ -921,6 +923,244 @@ class WorkflowEngine:
             "message": f"当前状态不允许继续",
             "current_status": current_status,
         }
+
+    # ──────────── Artifact 统一管理 ────────────
+
+    def update_artifact(self, session_id: str, stage: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply a user edit to an artifact, then recalculate and persist state."""
+        with self._state_lock:
+            state = self.get_state(session_id)
+            if not state:
+                raise KeyError(f"Session not found: {session_id}")
+
+            self._apply_artifact_update(state, stage, body if isinstance(body, dict) else {})
+            self._recalculate_all_statuses(state)
+            self.save_session_to_disk(session_id)
+            return {
+                "status": "ok",
+                "status_map": copy.deepcopy(state.status),
+                "artifact": copy.deepcopy(state.artifacts.get(stage)),
+            }
+
+    def _apply_artifact_update(self, state: WorkflowState, stage: str, body: Dict[str, Any]):
+        """Apply a user edit to in-memory artifacts before the session is persisted."""
+        if stage == "storyboard" and any(k in body for k in ("episodes", "segments", "shots")):
+            for shot in body.get('shots', []):
+                if isinstance(shot, dict) and 'is_new' in shot:
+                    shot['is_new'] = False
+
+            input_segments = list(body.get('segments', []))
+            for ep in body.get('episodes', []):
+                if isinstance(ep, dict):
+                    input_segments.extend(seg for seg in ep.get('segments', []) if isinstance(seg, dict))
+
+            seg_info_list = []
+            for seg in input_segments:
+                seg_id = seg.get('segment_id')
+                if not seg_id:
+                    continue
+                shots = seg.get('shots', [])
+                desc_video = " ".join([sh.get("plot") or sh.get("content") or "" for sh in shots]).strip()
+                total_dur = seg.get("total_duration") or sum([sh.get("duration", 0) for sh in shots]) or 10
+                seg_info_list.append({
+                    "segment_id": seg_id,
+                    "desc": desc_video,
+                    "duration": total_dur,
+                    "visual_prompt": seg.get("visual_prompt", ""),
+                })
+
+            video_art = state.artifacts.get('video_generation', {})
+            if isinstance(video_art, dict) and isinstance(video_art.get('clips'), list):
+                for clip in video_art['clips']:
+                    target = next((item for item in seg_info_list if item["segment_id"] == clip.get('id')), None)
+                    if target:
+                        clip['duration'] = target['duration']
+                        clip['description'] = target['desc']
+
+            ref_art = state.artifacts.get('reference_generation', {})
+            if isinstance(ref_art, dict) and isinstance(ref_art.get('scenes'), list):
+                for scene in ref_art['scenes']:
+                    target = next((item for item in seg_info_list if item["segment_id"] == scene.get('id')), None)
+                    if target and target.get("visual_prompt"):
+                        scene['description'] = target['visual_prompt']
+
+            if "segments" in body and "episodes" not in body:
+                body = {k: v for k, v in body.items() if k != "segments"}
+            body.pop('new_shot_ids', None)
+
+        elif stage == "reference_generation":
+            if "segments" in body:
+                seg_id_to_prompt = {
+                    s['segment_id']: s.get('visual_prompt', '')
+                    for s in body['segments']
+                    if isinstance(s, dict) and 'segment_id' in s
+                }
+
+                storyboard_art = state.artifacts.get('storyboard', {})
+                if isinstance(storyboard_art, dict):
+                    for ep in storyboard_art.get('episodes', []):
+                        if not isinstance(ep, dict):
+                            continue
+                        for seg in ep.get('segments', []):
+                            if isinstance(seg, dict) and seg.get('segment_id') in seg_id_to_prompt:
+                                seg['visual_prompt'] = seg_id_to_prompt[seg.get('segment_id')]
+
+                ref_art = state.artifacts.get('reference_generation', {})
+                if isinstance(ref_art, dict):
+                    for scene in ref_art.get('scenes', []):
+                        if isinstance(scene, dict) and scene.get('id') in seg_id_to_prompt:
+                            scene['description'] = seg_id_to_prompt[scene.get('id')]
+
+                body = {k: v for k, v in body.items() if k != "segments"}
+
+            ref_art = state.artifacts.get('reference_generation', {})
+            if isinstance(ref_art, dict):
+                scenes = ref_art.get('scenes', [])
+                is_selection_format = any(isinstance(k, str) and not isinstance(v, (list, dict)) for k, v in body.items())
+                if is_selection_format and scenes:
+                    for scene in scenes:
+                        if isinstance(scene, dict) and scene.get('id') in body:
+                            scene['selected'] = body[scene.get('id')]
+                    body = {}
+
+        elif stage == "video_generation":
+            clip_id_to_duration = {}
+            clip_id_to_description = {}
+            for clip_id, value in body.items():
+                if isinstance(value, dict):
+                    if 'duration' in value:
+                        clip_id_to_duration[clip_id] = value['duration']
+                    if 'description' in value:
+                        clip_id_to_description[clip_id] = value['description']
+
+            if clip_id_to_duration or clip_id_to_description:
+                storyboard_art = state.artifacts.get('storyboard', {})
+                if isinstance(storyboard_art, dict):
+                    for ep in storyboard_art.get('episodes', []):
+                        if not isinstance(ep, dict):
+                            continue
+                        for seg in ep.get('segments', []):
+                            if isinstance(seg, dict) and seg.get('segment_id') in clip_id_to_duration:
+                                seg['total_duration'] = clip_id_to_duration[seg.get('segment_id')]
+
+                vid_art = state.artifacts.get('video_generation', {})
+                if isinstance(vid_art, dict):
+                    for clip in vid_art.get('clips', []):
+                        if not isinstance(clip, dict):
+                            continue
+                        clip_id = clip.get('id')
+                        if clip_id in clip_id_to_duration:
+                            clip['duration'] = clip_id_to_duration[clip_id]
+                        if clip_id in clip_id_to_description:
+                            clip['description'] = clip_id_to_description[clip_id]
+
+            vid_art = state.artifacts.get('video_generation', {})
+            if isinstance(vid_art, dict):
+                clips = vid_art.get('clips', [])
+                is_selection_format = any(isinstance(k, str) and not isinstance(v, (list, dict)) for k, v in body.items())
+                if is_selection_format and clips:
+                    for clip in clips:
+                        if isinstance(clip, dict) and clip.get('id') in body:
+                            clip['selected'] = body[clip.get('id')]
+                    body = {}
+
+        current = state.artifacts.get(stage)
+        if current is None:
+            state.artifacts[stage] = body
+        elif isinstance(current, dict):
+            current.update(body)
+        else:
+            state.artifacts[stage] = body
+
+    def upload_artifact_image(
+        self,
+        session_id: str,
+        stage: str,
+        item_type: str,
+        item_id: str,
+        file_obj: Any,
+        filename: str = "",
+    ) -> Dict[str, Any]:
+        """Save a user-provided image and attach it to the target artifact item."""
+        allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+        ext = os.path.splitext(filename or "")[1].lower() or ".png"
+        if ext not in allowed_exts:
+            raise ValueError(f"仅支持 {', '.join(sorted(allowed_exts))} 格式的图片")
+
+        with self._state_lock:
+            state = self.get_state(session_id)
+            if not state:
+                raise KeyError(f"Session not found: {session_id}")
+
+            cfg = self._upload_item_config(stage, item_type, item_id)
+            absolute_path, relative_path = self._next_upload_path(session_id, cfg, ext)
+            try:
+                with open(absolute_path, "wb") as buffer:
+                    shutil.copyfileobj(file_obj, buffer)
+            except Exception as exc:
+                raise RuntimeError(f"图片保存失败: {exc}") from exc
+
+            artifact = state.artifacts.setdefault(stage, {})
+            items = artifact.setdefault(cfg["list_key"], [])
+            if not isinstance(items, list):
+                items = []
+                artifact[cfg["list_key"]] = items
+
+            target = next((item for item in items if isinstance(item, dict) and item.get("id") == item_id), None)
+            if target is None:
+                target = {"id": item_id, "name": item_id, "description": "", "versions": []}
+                items.append(target)
+
+            versions = target.get("versions")
+            if not isinstance(versions, list):
+                versions = []
+            if relative_path not in versions:
+                versions.append(relative_path)
+            target["versions"] = versions
+            target["selected"] = relative_path
+            target["status"] = "done"
+
+            self._recalculate_all_statuses(state)
+            self.save_session_to_disk(session_id)
+            return {
+                "status": "ok",
+                "path": relative_path,
+                "item_id": item_id,
+                "item_type": item_type,
+                "artifact": copy.deepcopy(state.artifacts.get(stage)),
+                "status_map": copy.deepcopy(state.status),
+            }
+
+    @staticmethod
+    def _upload_item_config(stage: str, item_type: str, item_id: str) -> Dict[str, str]:
+        if stage == "character_design" and item_type == "characters":
+            base = item_id if item_id.startswith("char_") else f"char_{item_id}"
+            return {"list_key": "characters", "dir": os.path.join("Assets", "characters"), "base": base}
+        if stage == "character_design" and item_type == "settings":
+            base = item_id if item_id.startswith("set_") else f"set_{item_id}"
+            return {"list_key": "settings", "dir": os.path.join("Assets", "settings"), "base": base}
+        if stage == "reference_generation" and item_type == "scenes":
+            return {"list_key": "scenes", "dir": "Scenes", "base": item_id}
+        raise ValueError("Unsupported upload target")
+
+    @staticmethod
+    def _next_upload_path(session_id: str, cfg: Dict[str, str], ext: str) -> tuple[str, str]:
+        from config import settings
+
+        save_dir = os.path.join(settings.RESULT_DIR, "image", str(session_id), cfg["dir"])
+        os.makedirs(save_dir, exist_ok=True)
+
+        pattern = re.compile(rf"^{re.escape(cfg['base'])}_upload_v(\d+)\.", re.IGNORECASE)
+        max_version = 0
+        for name in os.listdir(save_dir):
+            match = pattern.match(name)
+            if match:
+                max_version = max(max_version, int(match.group(1)))
+        version = f"v{max_version + 1}"
+        upload_filename = f"{cfg['base']}_upload_{version}{ext}"
+        absolute_path = os.path.join(save_dir, upload_filename)
+        relative_path = os.path.relpath(absolute_path, settings.BASE_DIR)
+        return absolute_path, relative_path
 
     # ──────────── 会话持久化 ────────────
 

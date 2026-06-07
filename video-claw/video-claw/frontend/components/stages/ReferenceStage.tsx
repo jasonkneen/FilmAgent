@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus, Edit2, Save } from 'lucide-react';
+import { Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus, Edit2, Save, X, Upload } from 'lucide-react';
 import type { StageViewProps } from './types';
-import { assetUrl } from './utils';
+import { assetUrl, assetVersionLabel } from './utils';
+import { uploadArtifactImage } from '@/lib/workflowApi';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
 import ImageLightbox from './ImageLightbox';
@@ -100,7 +101,7 @@ function ImageGallery({
               <div className={`text-center text-[10px] py-0.5 ${
                 isSelected ? 'bg-emerald-500 text-white font-medium' : 'bg-gray-50 text-gray-400'
               }`}>
-                v{i + 1}
+                {assetVersionLabel(path, i)}
               </div>
             </div>
           );
@@ -140,6 +141,9 @@ function SceneRow({
   onToggleEdit,
   getSelected,
   allowMissingGenerate,
+  onCancelEdit,
+  onUploadImage,
+  isUploading,
 }: {
   scene: SceneItem;
   canEdit: boolean;
@@ -154,6 +158,9 @@ function SceneRow({
   onToggleEdit?: () => void;
   getSelected: (scene: SceneItem) => string;
   allowMissingGenerate?: boolean;
+  onCancelEdit?: () => void;
+  onUploadImage: (file: File) => void;
+  isUploading?: boolean;
 }) {
   const isRunning = scene.status === 'running' || isRegenerating;
   const isPending = scene.status === 'pending';
@@ -167,7 +174,7 @@ function SceneRow({
       isFailed ? 'border-red-200' : 'border-gray-200'
     }`}>
       {/* 左侧: 提示词 */}
-      <div className="w-full xl:w-[360px] xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
+      <div className="w-full xl:w-80 xl:flex-shrink-0 p-4 border-b xl:border-b-0 xl:border-r border-gray-100 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
           <span className="flex items-center justify-center h-6 px-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex-shrink-0 whitespace-nowrap">
             {scene.index ?? scene.id.replace('Scene_', '')}
@@ -187,18 +194,26 @@ function SceneRow({
           {/* 编辑/保存按钮 */}
           {canEdit && !isStageRunning && (
             isEditing ? (
-              <button
-                onClick={onSavePrompt}
-                disabled={!hasChanges}
-                className={`ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  hasChanges
-                    ? 'text-white bg-emerald-500 hover:bg-emerald-600'
-                    : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                }`}
-              >
-                <Save className="w-3 h-3" />
-                保存
-              </button>
+              <div className="ml-auto flex gap-1">
+                <button
+                  onClick={onCancelEdit}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100"
+                >
+                  <X className="w-3 h-3" />取消
+                </button>
+                <button
+                  onClick={onSavePrompt}
+                  disabled={!hasChanges}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    hasChanges
+                      ? 'text-white bg-emerald-500 hover:bg-emerald-600'
+                      : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                  }`}
+                >
+                  <Save className="w-3 h-3" />
+                  保存
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onToggleEdit}
@@ -214,11 +229,11 @@ function SceneRow({
           <textarea
             value={editDesc}
             onChange={e => onDescChange(e.target.value)}
-            rows={6}
-            className="h-[180px] text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-300"
+            rows={5}
+            className="h-[120px] text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-300"
           />
         ) : (
-          <div className="h-[180px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="h-[120px] overflow-y-auto pr-1 custom-scrollbar">
             <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{scene.description}</p>
           </div>
         )}
@@ -238,6 +253,27 @@ function SceneRow({
             <RefreshCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin' : ''}`} />
             {isRegenerating ? '生成中...' : isFailed ? '点击重试' : hasImage ? '重新生成' : '生成'}
           </button>
+        )}
+        {!isStageRunning && (
+          <label className={`mt-2 ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            isUploading
+              ? 'text-gray-400 bg-gray-100 cursor-wait'
+              : 'text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer'
+          }`}>
+            {isUploading ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+            {isUploading ? '上传中...' : '上传图片'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={isUploading}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                e.currentTarget.value = '';
+                if (file) onUploadImage(file);
+              }}
+            />
+          </label>
         )}
       </div>
 
@@ -318,6 +354,7 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
   const regenerationStartCounts = useRef<Record<string, number>>({});
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
 
   // 提取剧集标题映射
   const episodeTitleMap = React.useMemo(() => {
@@ -454,6 +491,35 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
     });
   };
 
+  const handleCancelEdit = (sceneId: string) => {
+    const scene = scenes.find(item => item.id === sceneId);
+    setEditDescs(prev => ({ ...prev, [sceneId]: scene?.description || '' }));
+    setEditingIds(prev => {
+      const next = new Set(prev);
+      next.delete(sceneId);
+      return next;
+    });
+  };
+
+  const handleUploadImage = async (sceneId: string, file: File) => {
+    setUploadingIds(prev => new Set(prev).add(sceneId));
+    try {
+      const result = await uploadArtifactImage(sessionId, 'reference_generation', 'scenes', sceneId, file);
+      if (result.artifact?.scenes) {
+        onUpdateArtifact?.({ scenes: result.artifact.scenes });
+      }
+      setSelectedVersions(prev => ({ ...prev, [sceneId]: result.path }));
+    } catch (error) {
+      console.error('上传图片失败:', error);
+    } finally {
+      setUploadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(sceneId);
+        return next;
+      });
+    }
+  };
+
   const handleRegenerate = (sceneId: string) => {
     const scene = scenes.find(item => item.id === sceneId);
     regenerationStartCounts.current[sceneId] = scene?.versions?.length || 0;
@@ -547,9 +613,12 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
                             isRegenerating={regeneratingIds.has(scene.id)}
                             isEditing={editingIds.has(scene.id)}
                             onToggleEdit={() => handleToggleEdit(scene.id)}
+                            onCancelEdit={() => handleCancelEdit(scene.id)}
                             canEdit={canEdit}
                             getSelected={getSelected}
                             allowMissingGenerate={state.status !== 'pending'}
+                            onUploadImage={file => handleUploadImage(scene.id, file)}
+                            isUploading={uploadingIds.has(scene.id)}
                           />
                         </div>
                       ))}
