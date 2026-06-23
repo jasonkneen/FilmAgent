@@ -60,6 +60,32 @@ class VideoDirectorAgent(AgentInterface):
 
     # ─── 视频生成 ───
 
+    def _generate_video_with_doctor(self, client, *, prompt: str, model: str,
+                                    llm_model: str, context: dict, **kwargs) -> tuple:
+        """Generate once; retry with a doctor-rewritten prompt only for prompt issues."""
+        try:
+            client.generate_video(prompt=prompt, model=model, **kwargs)
+            return prompt, None
+        except Exception as exc:
+            from .doctor_agent import DoctorAgent
+
+            doctor = DoctorAgent(llm_model=llm_model)
+            rewritten, diagnosis = doctor.maybe_rewrite_prompt(
+                stage="video_generation",
+                model=model,
+                prompt=prompt,
+                error=str(exc),
+                context=context,
+            )
+            if not rewritten:
+                logger.info("Doctor skipped video prompt rewrite: %s", diagnosis.get("reason"))
+                raise
+
+            logger.info("Doctor rewrote video prompt: reason_type=%s reason=%s",
+                        diagnosis.get("reason_type"), diagnosis.get("reason"))
+            client.generate_video(prompt=rewritten, model=model, **kwargs)
+            return rewritten, diagnosis
+
     def _generate_one(self, sid: str, segment_id: str, prompt: str,
                       img_path: Optional[str], video_model: str,
                       duration: int = 10, sound: str = "",
@@ -68,7 +94,8 @@ class VideoDirectorAgent(AgentInterface):
                       video_resolution: str = "720P",
                       video_generation_mode: str = "first_frame",
                       last_image_path: Optional[str] = None,
-                      reference_image_paths: Optional[List[str]] = None) -> tuple:
+                      reference_image_paths: Optional[List[str]] = None,
+                      llm_model: str = "") -> tuple:
         """生成单个视频片段，返回 (segment_id, path_or_None)"""
         if self.cancellation_check and self.cancellation_check():
             logger.info(f"VideoDirectorAgent: {segment_id} 跳过（用户取消）")
@@ -88,11 +115,20 @@ class VideoDirectorAgent(AgentInterface):
         try:
             from models.video_client import VideoClient
             client = VideoClient()
-            client.generate_video(
+            self._generate_video_with_doctor(
+                client,
                 prompt=prompt,
+                model=video_model,
+                llm_model=llm_model,
+                context={
+                    "segment_id": segment_id,
+                    "video_generation_mode": video_generation_mode,
+                    "duration": duration,
+                    "video_ratio": video_ratio,
+                    "video_resolution": video_resolution,
+                },
                 image_path=img_path,
                 save_path=save_path,
-                model=video_model,
                 duration=duration,
                 sound=sound,
                 shot_type=shot_type,
@@ -409,6 +445,7 @@ class VideoDirectorAgent(AgentInterface):
 
         session_meta = self._session_meta(input_data)
         video_generation_mode, video_model = self._select_video_model(input_data, session_meta)
+        llm_model = input_data.get("llm_model") or session_meta.get("llm_model") or ""
         enable_concurrency = input_data.get("enable_concurrency", True)
         from models.config_model import get_max_concurrency
         concurrency = get_max_concurrency(video_model, enable_concurrency)
@@ -494,7 +531,7 @@ class VideoDirectorAgent(AgentInterface):
                                 self._generate_one, sid, seg_id, prompt,
                                 img_path, video_model, duration,
                                 video_sound, video_shot_type, video_ratio, video_resolution,
-                                video_generation_mode, last_img_path, reference_image_paths
+                                video_generation_mode, last_img_path, reference_image_paths, llm_model
                             )
                             futs[fut] = seg_id
                         for fut in as_completed(futs):
@@ -575,7 +612,7 @@ class VideoDirectorAgent(AgentInterface):
                         self._generate_one, sid, seg_id, prompt,
                         img_path, video_model, dur,
                         video_sound, video_shot_type, video_ratio, video_resolution,
-                        video_generation_mode, last_img_path, reference_image_paths
+                        video_generation_mode, last_img_path, reference_image_paths, llm_model
                     )
                     futs[fut] = seg_id
                 for fut in as_completed(futs):

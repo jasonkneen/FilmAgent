@@ -187,6 +187,7 @@ class ImageClient:
         os.makedirs(save_dir, exist_ok=True)
         
         generated_local_paths = []
+        provider_errors = []
 
         if is_seedream:
             # --- Seedream Logic ---
@@ -203,9 +204,12 @@ class ImageClient:
 
                 if paths:
                     generated_local_paths.extend(paths)
+                else:
+                    provider_errors.append("Seedream returned no images")
 
             except Exception as e:
                 logger.exception("Seedream generation failed: %s", e)
+                provider_errors.append(f"Seedream: {e}")
 
         elif is_sora:
             # --- GPT/Sora Logic ---
@@ -229,9 +233,11 @@ class ImageClient:
                     generated_local_paths.append(path)
                 else:
                     logger.error("GPT/Sora returned invalid path or download failed: %s", path)
+                    provider_errors.append(f"GPT/Sora returned invalid path or download failed: {path}")
 
             except Exception as e:
                 logger.exception("GPT/Sora generation failed: %s", e)
+                provider_errors.append(f"GPT/Sora: {e}")
 
         else:
             # --- DashScope Logic ---
@@ -271,8 +277,13 @@ class ImageClient:
                 
                 if paths:
                     generated_local_paths.extend(paths)
+                else:
+                    provider_errors.append("DashScope returned no images")
                             
             except Exception as e:
                 logger.exception("DashScope generation failed: %s", e)
+                provider_errors.append(f"DashScope: {e}")
 
+        if not generated_local_paths and provider_errors:
+            raise RuntimeError("Image generation failed: " + " | ".join(provider_errors))
         return generated_local_paths

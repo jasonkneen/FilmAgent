@@ -67,11 +67,12 @@ class DashScopeClient:
                 
                 return results
             else:
-                logging.error(f"Image generation failed: {response.code}, {response.message}, status={response.status_code}")
-                return []
+                error_msg = f"{response.code}, {response.message}, status={response.status_code}"
+                logging.error(f"Image generation failed: {error_msg}")
+                raise RuntimeError(error_msg)
         except Exception as e:
             logging.error(f"Error in generate_image (DashScope): {e}")
-            return []
+            raise
 
     def edit_image(self, prompt, image_urls, model="wan2.7-image", size="1920*1080", n=1, session_id=None, save_dir=None):
         """
@@ -135,11 +136,12 @@ class DashScopeClient:
 
                 return results
             else:
-                logging.error(f"Image edit failed: {response.code}, {response.message}, status={response.status_code}")
-                return []
+                error_msg = f"{response.code}, {response.message}, status={response.status_code}"
+                logging.error(f"Image edit failed: {error_msg}")
+                raise RuntimeError(error_msg)
         except Exception as e:
             logging.error(f"Error in edit_image: {e}")
-            return []
+            raise
 
 
 if __name__ == "__main__":

@@ -130,6 +130,36 @@ class CharacterDesignerAgent(AgentInterface):
 
     # ─── 图片生成 ───
 
+    def _generate_image_with_doctor(self, img_client, *, prompt: str, model: str,
+                                    llm_model: str, context: dict, **kwargs) -> tuple:
+        """Generate once; if prompt-related failure is diagnosed, rewrite and retry once."""
+        try:
+            paths = img_client.generate_image(prompt=prompt, model=model, **kwargs)
+            if not paths:
+                raise RuntimeError("Image generation returned no output")
+            return paths, prompt
+        except Exception as exc:
+            from .doctor_agent import DoctorAgent
+
+            doctor = DoctorAgent(llm_model=llm_model)
+            rewritten, diagnosis = doctor.maybe_rewrite_prompt(
+                stage="character_design",
+                model=model,
+                prompt=prompt,
+                error=str(exc),
+                context=context,
+            )
+            if not rewritten:
+                logger.info("Doctor skipped character prompt rewrite: %s", diagnosis.get("reason"))
+                raise
+
+            logger.info("Doctor rewrote character prompt: reason_type=%s reason=%s",
+                        diagnosis.get("reason_type"), diagnosis.get("reason"))
+            paths = img_client.generate_image(prompt=rewritten, model=model, **kwargs)
+            if not paths:
+                raise RuntimeError("Image generation returned no output after doctor rewrite")
+            return paths, rewritten
+
     def _build_preview(self, sid: str, chars_desc: dict, sets_desc: dict) -> dict:
         """构建素材预览列表（含当前状态）用于前端实时显示"""
         preview = {"characters": [], "settings": []}
@@ -159,7 +189,8 @@ class CharacterDesignerAgent(AgentInterface):
 
     def _generate_one(self, img_client, asset_id: str, name: str, desc: str,
                       asset_type: str, style: str, species: str,
-                      t2i_model: str, vlm_model: str, sid: str, max_iterations: int = 3) -> tuple:
+                      t2i_model: str, vlm_model: str, sid: str,
+                      llm_model: str = "", max_iterations: int = 3) -> tuple:
         """生成单个素材图并返回 (asset_id, path_or_None, eval_result)
 
         评估-生成循环：如果 VLM 评估发现问题，最多重新生成 max_iterations 次
@@ -184,12 +215,18 @@ class CharacterDesignerAgent(AgentInterface):
             save_dir = os.path.dirname(save_path)
 
             try:
-                paths = img_client.generate_image(
+                paths, current_prompt = self._generate_image_with_doctor(
+                    img_client,
                     prompt=current_prompt, model=t2i_model,
+                    llm_model=llm_model,
+                    context={
+                        "asset_id": asset_id,
+                        "asset_name": name,
+                        "asset_type": asset_type,
+                        "description": desc,
+                    },
                     session_id=str(sid), save_dir=save_dir, video_ratio=video_ratio, resolution=resolution,
                 )
-                if not paths:
-                    continue
 
                 gen = paths[0]
                 if gen != save_path:
@@ -407,6 +444,7 @@ class CharacterDesignerAgent(AgentInterface):
         style = input_data.get("style", "anime")
         t2i_model = self._require_input(input_data, "image_t2i_model")
         vlm_model = self._require_input(input_data, "vlm_model")
+        llm_model = input_data.get("llm_model") or self._session_meta(input_data).get("llm_model") or ""
         # 根据 enable_concurrency 决定并发数
         enable_concurrency = input_data.get("enable_concurrency", True)
         logger.info(f"[CharacterAgent] enable_concurrency={enable_concurrency}")
@@ -527,7 +565,7 @@ class CharacterDesignerAgent(AgentInterface):
                             })
                             fut = executor.submit(
                                 self._generate_one, img_client,
-                                aid, name, desc, atype, style, species, t2i_model, vlm_model, sid
+                                aid, name, desc, atype, style, species, t2i_model, vlm_model, sid, llm_model
                             )
                             futs[fut] = (atype, aid, name)
                         for fut in as_completed(futs):
@@ -617,7 +655,7 @@ class CharacterDesignerAgent(AgentInterface):
                     })
                     fut = executor.submit(
                         self._generate_one, img_client,
-                        aid, name, desc, atype, style, species, t2i_model, vlm_model, sid,
+                        aid, name, desc, atype, style, species, t2i_model, vlm_model, sid, llm_model,
                     )
                     futs[fut] = (atype, aid, name)
 

@@ -219,6 +219,36 @@ class ReferenceGeneratorAgent(AgentInterface):
 
     # ─── 单张生成 ───
 
+    def _generate_image_with_doctor(self, img_client, *, prompt: str, model: str,
+                                    llm_model: str, context: dict, **kwargs) -> tuple:
+        """Generate once; if doctor rewrites a prompt-related failure, retry once."""
+        try:
+            paths = img_client.generate_image(prompt=prompt, model=model, **kwargs)
+            if not paths:
+                raise RuntimeError("Image generation returned no output")
+            return paths, prompt
+        except Exception as exc:
+            from .doctor_agent import DoctorAgent
+
+            doctor = DoctorAgent(llm_model=llm_model)
+            rewritten, diagnosis = doctor.maybe_rewrite_prompt(
+                stage="reference_generation",
+                model=model,
+                prompt=prompt,
+                error=str(exc),
+                context=context,
+            )
+            if not rewritten:
+                logger.info("Doctor skipped reference prompt rewrite: %s", diagnosis.get("reason"))
+                raise
+
+            logger.info("Doctor rewrote reference prompt: reason_type=%s reason=%s",
+                        diagnosis.get("reason_type"), diagnosis.get("reason"))
+            paths = img_client.generate_image(prompt=rewritten, model=model, **kwargs)
+            if not paths:
+                raise RuntimeError("Image generation returned no output after doctor rewrite")
+            return paths, rewritten
+
     @staticmethod
     def _apply_eval_feedback_to_visual_prompt(current_prompt: str, eval_result: dict, version: int) -> str:
         suggested_prompt = (eval_result.get('suggested_prompt') or '').strip()
@@ -254,6 +284,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                       style: str, it2i_model: str, t2i_model: str,
                       video_ratio: str = "16:9", resolution: str = "1080P", vlm_model: str = "qwen3.5-plus",
                       character_description: str = "", setting_description: str = "",
+                      llm_model: str = "",
                       max_versions: int = 3) -> tuple:
         """生成单个片段参考图，返回 (segment_id, path_or_None, eval_result)
 
@@ -291,17 +322,23 @@ class ReferenceGeneratorAgent(AgentInterface):
             save_dir = os.path.dirname(save_path)
 
             try:
-                paths = img_client.generate_image(
+                paths, used_prompt = self._generate_image_with_doctor(
+                    img_client,
                     prompt=full_prompt,
-                    image_paths=refs if refs else None,
                     model=model,
+                    llm_model=llm_model,
+                    context={
+                        "segment_id": segment_id,
+                        "location": segment.get("location", ""),
+                        "characters": segment.get("characters", []),
+                        "plot": plot,
+                    },
+                    image_paths=refs if refs else None,
                     session_id=str(sid),
                     save_dir=save_dir,
                     video_ratio=video_ratio,
                     resolution=resolution,
                 )
-                if not paths:
-                    continue
 
                 gen = paths[0]
                 if gen != save_path:
@@ -328,6 +365,8 @@ class ReferenceGeneratorAgent(AgentInterface):
 
                 # 记录版本信息
                 eval_result["final_visual_prompt"] = current_visual_prompt
+                if used_prompt != full_prompt:
+                    eval_result["doctor_rewritten_prompt"] = used_prompt
                 all_versions.append(save_path)
                 all_eval_results.append(eval_result)
 
@@ -711,7 +750,8 @@ class ReferenceGeneratorAgent(AgentInterface):
                             img_client, sid,
                             seg, ff_prompt, refs,
                             style, it2i, t2i, video_ratio, resolution, vlm_model,
-                            character_description=char_desc, setting_description=set_desc
+                            character_description=char_desc, setting_description=set_desc,
+                            llm_model=llm_model,
                         )
                         final_prompt = ff_prompt
                         if isinstance(eval_result, dict):
@@ -857,7 +897,8 @@ class ReferenceGeneratorAgent(AgentInterface):
                         img_client, sid,
                         seg, ff_prompt, refs,
                         style, it2i, t2i, video_ratio, resolution, vlm_model,
-                        character_description=char_desc, setting_description=set_desc
+                        character_description=char_desc, setting_description=set_desc,
+                        llm_model=llm_model,
                     )
                     final_prompt = ff_prompt
                     if isinstance(eval_result, dict):
